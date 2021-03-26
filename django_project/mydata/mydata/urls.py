@@ -13,9 +13,35 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
+from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path
+from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
+from rest_framework import routers
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
+    path("admin/", admin.site.urls),
+    path("api-auth/", include("rest_framework.urls", namespace="rest_framework")),
+    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
+    path("api/schema/swagger-ui/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
+    path("api/schema/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
+]
+
+router = routers.DefaultRouter()
+
+if "timeline" in settings.INSTALLED_APPS:
+    from timeline import views
+
+    router.register(r"timeline/source", views.SourceViewSet)
+    router.register(r"timeline/event", views.EventViewSet)
+
+if "track" in settings.INSTALLED_APPS:
+    from track import views
+
+    router.register(r"track/trackpoints", views.TrackpointViewSet)
+    router.register(r"track/tracksegs", views.TracksegViewSet)
+    router.register(r"track/trackfiles", views.TrackfileViewSet)
+
+urlpatterns += [
+    path("api/", include(router.urls)),
 ]
