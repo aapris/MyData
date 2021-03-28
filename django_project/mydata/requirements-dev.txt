@@ -1,0 +1,4 @@
+django_extensions
+jupyter
+ipython
+black
