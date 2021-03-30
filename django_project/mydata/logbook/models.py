@@ -48,7 +48,7 @@ class Message(models.Model):
 
 # TODO: rename to something else
 class RawFile(models.Model):
-    message = models.ForeignKey(Message, on_delete=models.CASCADE, related_name="file")
+    message = models.ForeignKey(Message, on_delete=models.CASCADE, related_name="files")
     file = models.FileField(upload_to="files/%Y/%m/%d/")
     mimetype = models.CharField(max_length=256)
     created_at = models.DateTimeField(auto_now_add=True)
