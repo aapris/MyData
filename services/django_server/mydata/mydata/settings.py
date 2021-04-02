@@ -10,19 +10,26 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/3.2/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+FILE_DIR = BASE_DIR / "files"
+LOG_DIR = BASE_DIR / "logs"
+for d in [FILE_DIR, LOG_DIR]:
+    os.makedirs(d, exist_ok=True)
+
+LOG_FILE = LOG_DIR / "django.log"
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/3.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-^&8yk3u1s$ge3&q62bkup1#qn@=lwk%+$$p9%3wdfgbo(41ja#'
+SECRET_KEY = os.environ['DJANGO_SECRET_KEY']
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 ALLOWED_HOSTS = []
 
@@ -36,6 +43,13 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django.contrib.gis',
+    'rest_framework',
+    'rest_framework_gis',
+    'drf_spectacular',
+    'track',
+    'logbook',
+    'timeline',
+    'django_extensions',
 ]
 
 MIDDLEWARE = [
@@ -72,10 +86,32 @@ WSGI_APPLICATION = 'mydata.wsgi.application'
 # https://docs.djangoproject.com/en/3.2/ref/settings/#databases
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+    "default": {
+        "ENGINE": os.environ.get("SQL_ENGINE", "django.contrib.gis.db.backends.postgis"),
+        "NAME": os.environ.get("POSTGRES_DB", ""),
+        "USER": os.environ.get("POSTGRES_USER", ""),
+        "PASSWORD": os.environ.get("POSTGRES_PASSWORD", ""),
+        "HOST": os.environ.get("POSTGRESQL_HOST", "localhost"),
+        "PORT": os.environ.get("POSTGRESQL_PORT", "5432"),
     }
+}
+
+REST_FRAMEWORK = {
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 20,
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+SWAGGER_SETTINGS = {
+    'SECURITY_DEFINITIONS': {
+        'basic': {
+            'type': 'basic'
+        }
+    },
+}
+
+REDOC_SETTINGS = {
+    'LAZY_RENDERING': False,
 }
 
 # Password validation
@@ -118,6 +154,69 @@ STATIC_URL = '/static/'
 # https://docs.djangoproject.com/en/dev/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'filters': {
+        'require_debug_false': {
+            '()': 'django.utils.log.RequireDebugFalse'
+        }
+    },
+    'formatters': {
+        'verbose': {
+            'format': '%(levelname)s %(asctime)s %(module)s %(process)d %(thread)d %(message)s'
+        },
+        'detailed': {
+            'format': '[%(asctime)s] %(levelname)-8s %(module)s.%(funcName)s:%(lineno)d "%(message)s"'
+        },
+        'simple': {
+            'format': '[%(asctime)s] %(levelname)-8s"%(message)s"'
+        },
+    },
+    'handlers': {
+        'mail_admins': {
+            'level': 'ERROR',
+            'filters': ['require_debug_false'],
+            'class': 'django.utils.log.AdminEmailHandler'
+        },
+        'file': {
+            'level': 'INFO',
+            'class': 'logging.handlers.TimedRotatingFileHandler',
+            'filename': LOG_FILE,
+            'formatter': 'detailed',
+            'delay': False,
+            'when': 'midnight',
+        },
+    },
+    'loggers': {
+        'django.request': {
+            'handlers': ['mail_admins'],
+            'level': 'ERROR',
+            'propagate': True,
+        },
+        'endpoints': {
+            'handlers': ['file'],
+            'level': 'INFO',
+            'propagate': True,
+        },
+    }
+}
+
+# Module settings
+
+
+TRACK = {
+    "FILE_DIR": FILE_DIR / "track"
+}
+
+TIMELINE = {
+    "FILE_DIR": FILE_DIR / "timeline"
+}
+
+LOGBOOK = {
+    "FILE_DIR": FILE_DIR / "track"
+}
 
 # local_settings.py can be used to override environment-specific settings
 # like database and email that differ between development and production.
