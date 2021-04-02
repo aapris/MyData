@@ -6,4 +6,16 @@ drf-spectacular
 packaging
 markdown       # Markdown support for the browsable API.
 psycopg2
+requests
+python-dateutil
+
+# logbook
+python-telegram-bot
+Pillow
+
+# timeline
+icalendar
+
+# track
+gpxpy
 
