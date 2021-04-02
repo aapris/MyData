@@ -1,0 +1,32 @@
+version: '3.7'
+
+x-base: &base
+  env_file:
+    - ./.env.dev
+services:
+#  python:
+#    <<: *base
+#    build: ./services/django_server
+#    command: python manage.py
+#    depends_on:
+#      - db
+#    volumes:
+#      - ./services/python/:/usr/src/app/
+  django_server:
+    <<: *base
+    build: ./services/django_server
+    command: python manage.py runserver 0.0.0.0:8000
+    ports:
+      - 8000:8000
+    depends_on:
+      - db
+    volumes:
+      - ./services/django_server:/app
+  db:
+    <<: *base
+    image: postgis/postgis
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+
+volumes:
+  postgres_data:

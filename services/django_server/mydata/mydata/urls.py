@@ -32,8 +32,8 @@ router = routers.DefaultRouter()
 if "timeline" in settings.INSTALLED_APPS:
     from timeline import views
 
-    router.register(r"timeline/source", views.SourceViewSet)
-    router.register(r"timeline/event", views.EventViewSet)
+    router.register(r"timeline/sources", views.SourceViewSet)
+    router.register(r"timeline/events", views.EventViewSet)
 
 if "track" in settings.INSTALLED_APPS:
     from track import views
@@ -41,6 +41,12 @@ if "track" in settings.INSTALLED_APPS:
     router.register(r"track/trackpoints", views.TrackpointViewSet)
     router.register(r"track/tracksegs", views.TracksegViewSet)
     router.register(r"track/trackfiles", views.TrackfileViewSet)
+
+if "logbook" in settings.INSTALLED_APPS:
+    from logbook import views
+
+    router.register(r"logbook/messages", views.MessageViewSet)
+    router.register(r"logbook/keywords", views.KeywordViewSet)
 
 urlpatterns += [
     path("api/", include(router.urls)),

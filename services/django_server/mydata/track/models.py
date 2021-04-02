@@ -18,7 +18,7 @@ from django.template.defaultfilters import slugify
 
 from track.utils import simplify, parse_gpxfile
 
-trackfile_storage = FileSystemStorage(location=settings.TRACK.get("TRACKLOG_DIR"))
+trackfile_storage = FileSystemStorage(location=settings.TRACK.get("FILE_DIR"))
 
 TIMEFORMAT = "%Y-%m-%dT%H:%M:%S%Z"
 
@@ -34,7 +34,7 @@ def get_trackfile_upload_to(obj, filename):
         obj.save()  # save the object to ensure there is obj.id available
     longid = "{:09d}".format(obj.id)  # e.g. '000012345'
     chunkindex = [i for i in range(0, len(longid) - 3, 3)]  # -> [0, 3, 6]
-    path = os.sep.join([longid[j : j + 3] for j in chunkindex] + [filename])
+    path = os.sep.join([longid[j: j + 3] for j in chunkindex] + [filename])
     return path
 
 

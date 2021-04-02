@@ -14,11 +14,15 @@ in encrypted disk and carefully preserved in every way.
 
 ## Components
 
-Some day in the future at least these data types will be supported:
+Currently supported data types are:
 
 * GPS tracks (from GPS loggers, smart watches and mobile apps)
+* Calendar events (timeline)
+* Daily events (logbook, e.g. eaten foods, drinks, felt pain and sensations, use of alcohol and drugs)
+
+Some day in the future at least these data types will be supported:
+
 * Media (photos, videos and audio recordings from mobile phones, cameras and camcorders)
-* Calendar events
 
 Later it might be interesting to add:
 
@@ -27,5 +31,4 @@ Later it might be interesting to add:
 * Social media activity
 * Health data (from health wearables)
 * Sport activities 
-* Use of alcohol and drugs
 * etc.
