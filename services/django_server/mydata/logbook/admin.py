@@ -21,7 +21,7 @@ class MessageAdmin(admin.ModelAdmin):
     ]
 
     def get_file(self, obj):
-        files = obj.file.all()
+        files = obj.files.all()
         if files:
             return files[0].file.name
 
