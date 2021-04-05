@@ -10,6 +10,7 @@ from typing import Optional
 import pytz
 import requests
 import telegram
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.files import File
 from django.core.management.base import BaseCommand
@@ -17,7 +18,7 @@ from telegram import ChatAction
 from telegram.ext import CallbackContext
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 
-from logbook.models import Alcohol, Keyword, Sensation, Drink, Nutrition, Drug
+from logbook.models import Alcohol, Keyword, Sensation, Drink, Nutrition, Drug, BaseLogbookModel
 from logbook.models import Message, RawFile
 from .mytelegrambot import Bot
 
@@ -38,7 +39,7 @@ weight_re = re.compile(r"(\d+\.?\d*)({})".format("|".join(weight_units.keys())))
 percentage_re = re.compile(r"(\d+\.?\d*)%")
 
 
-def download_to_file_field(url, filename, field):
+def download_to_file_field(url: str, filename: str, field: RawFile.file):
     with TemporaryFile() as tf:
         r = requests.get(url, stream=True)
         for chunk in r.iter_content(chunk_size=4096):
@@ -47,7 +48,7 @@ def download_to_file_field(url, filename, field):
         field.save(filename, File(tf), save=True)
 
 
-def parse_time(time_str: str, timestamp: Optional[datetime.datetime] = None) -> datetime.datetime:
+def parse_time(timezone: str, time_str: str, timestamp: Optional[datetime.datetime] = None) -> datetime.datetime:
     """
     Parse given string and return timezone aware datetime.
     Time must be in one of following formats:
@@ -65,11 +66,14 @@ def parse_time(time_str: str, timestamp: Optional[datetime.datetime] = None) -> 
     if hhmm:
         hhmm = hhmm[0]
         if hhmm[0] == "-":
-            return timestamp - datetime.timedelta(hours=int(hhmm[1]), minutes=int(hhmm[2]))
+            timestamp = timestamp - datetime.timedelta(hours=int(hhmm[1]), minutes=int(hhmm[2]))
         elif hhmm[0] == "+":
-            return timestamp + datetime.timedelta(hours=int(hhmm[1]), minutes=int(hhmm[2]))
+            timestamp = timestamp + datetime.timedelta(hours=int(hhmm[1]), minutes=int(hhmm[2]))
         else:
-            return timestamp.replace(hour=int(hhmm[1]), minute=int(hhmm[2]), second=0, microsecond=0)
+            timestamp = timestamp.replace(hour=int(hhmm[1]), minute=int(hhmm[2]), second=0, microsecond=0)
+        timestamp = timestamp.replace(tzinfo=None)
+        timestamp = pytz.timezone(timezone).localize(timestamp)
+        return timestamp
 
     # Parse -10, 10, +10 minutes format
     minutes = minute_re.findall(time_str)
@@ -86,7 +90,7 @@ def parse_message(msg: list):
     print(msg)
 
 
-def parse_single_match(words: list, compiled_re: re.Pattern):
+def parse_single_match(words: list, compiled_re: re.Pattern) -> float:
     """
     Loop through words and try to match them to compiled_re.
     Return match as a float.
@@ -104,7 +108,7 @@ def parse_single_match(words: list, compiled_re: re.Pattern):
             return val
 
 
-def parse_dup_match(words: list, compiled_re: re.Pattern, units: dict):
+def parse_dup_match(words: list, compiled_re: re.Pattern, units: dict) -> float:
     """
     Loop through words and return a float, if a volume string (1dl, 0.5l etc) is found.
     Note: current word is removed from original list.
@@ -122,32 +126,32 @@ def parse_dup_match(words: list, compiled_re: re.Pattern, units: dict):
             return val
 
 
-def parse_volume(words: list):
+def parse_volume(words: list) -> float:
     return parse_dup_match(words, vol_re, vol_units)
 
 
-def parse_weight(words: list):
+def parse_weight(words: list) -> float:
     """
     Loop through words and return a float, if a weight string (1kg, 400g etc) is found.
     """
     return parse_dup_match(words, weight_re, weight_units)
 
 
-def parse_percentage(words: list):
+def parse_percentage(words: list) -> float:
     """
     Loop through words and return a float, if a % string (2%, 4.7% etc) is found.
     """
     return parse_single_match(words, percentage_re)
 
 
-def parse_float(words: list):
+def parse_float(words: list) -> float:
     """
     Loop through words and return a float, if a float is found.
     """
     return parse_single_match(words, float_re)
 
 
-def save_alcohol(words: list):
+def save_alcohol(words: list) -> Alcohol:
     """
     Parse details from message text and save an Alcohol instance.
     :param words: original message tokenized
@@ -157,7 +161,7 @@ def save_alcohol(words: list):
     return Alcohol(abv=percentage, volume=vol)
 
 
-def save_sensation(words: list):
+def save_sensation(words: list) -> Sensation:
     """
     Parse details from message text and save a Sensation instance.
     :param words: original message tokenized
@@ -167,7 +171,7 @@ def save_sensation(words: list):
     return Sensation(intensity=intensity)
 
 
-def save_drink(words: list):
+def save_drink(words: list) -> Drink:
     """
     Parse details from message text and save a Drink instance.
     :param words: original message text tokenized
@@ -177,7 +181,7 @@ def save_drink(words: list):
     return Drink(volume=vol)
 
 
-def save_nutrition(words: list):
+def save_nutrition(words: list) -> Nutrition:
     """
     Parse details from message text and save a Nutrition instance.
     :param words: original message's text tokenized
@@ -187,7 +191,7 @@ def save_nutrition(words: list):
     return Nutrition(quantity=weight)
 
 
-def save_drug(words: list):
+def save_drug(words: list) -> Drug:
     """
     Parse details from message text and save a Drug instance.
     :param words: original message's text tokenized
@@ -197,7 +201,7 @@ def save_drug(words: list):
     return Drug(quantity=weight)
 
 
-def save_action(message: Message, words: list, keyword: Keyword, timestamp: datetime.datetime):
+def save_action(message: Message, words: list, keyword: Keyword, timestamp: datetime.datetime) -> BaseLogbookModel:
     obj = None
     if keyword.model == "Alcohol":
         obj = save_alcohol(words)
@@ -233,8 +237,29 @@ class MyBot(Bot):
     def __init__(self, token: str, username: str):
         super().__init__(token)
         self.user = User.objects.get(username=username)
+        self.timezone = settings.TIME_ZONE
 
-    def download_files(self, message: Message, update: telegram.update.Update, context: CallbackContext):
+    def set_cmd(self, update: telegram.update.Update, context: CallbackContext):
+        print(json.dumps(update.to_dict(), indent=2))
+        words = update.message.text.split()
+        words.pop(0)  # Remove /set
+        if len(words) == 0:
+            context.bot.send_message(chat_id=update.effective_chat.id, text="Empty command")
+        cmd = words.pop(0)
+        if cmd in ["tz", "timezone"]:
+            tz = [s for s in pytz.all_timezones if "helsinki".lower() in s.lower()]
+            if len(tz) == 1:
+                self.timezone = tz[0]
+                msg = f"Set timezone to {self.timezone}"
+                context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
+            else:
+                msg = "Found many:\n" + "\n- ".join(tz)
+                context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
+        else:
+            msg = "Unknown setting"
+            context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
+
+    def download_files(self, message: Message, update: telegram.update.Update, context: CallbackContext) -> RawFile:
         """
         Download possible file attachment and store it to
         """
@@ -255,7 +280,7 @@ class MyBot(Bot):
         # Try to find time shift string
         # TODO: use timeformat with t postfix or something
         if len(strings) > 1:
-            timestamp = parse_time(strings[1], update.message.date)
+            timestamp = parse_time(self.timezone, strings[1], update.message.date)
         else:
             timestamp = update.message.date
         print(f"Message time: {timestamp}")

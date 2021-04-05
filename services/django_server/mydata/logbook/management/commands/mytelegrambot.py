@@ -96,7 +96,7 @@ class Bot(ABC):
         msg_text = self.set_media_group_id(update, msg_text)
         return msg_text
 
-    def set_media_group_id(self, update: telegram.update.Update, msg_text: str):
+    def set_media_group_id(self, update: telegram.update.Update, msg_text: str) -> str:
         """
         If media_group_id is present, this Update is part of multi-file post.
         Store msg_text for future use.
