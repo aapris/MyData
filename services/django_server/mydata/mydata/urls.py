@@ -47,6 +47,7 @@ if "logbook" in settings.INSTALLED_APPS:
 
     router.register(r"logbook/messages", views.MessageViewSet)
     router.register(r"logbook/keywords", views.KeywordViewSet)
+    router.register(r"logbook/files", views.FileViewSet)
 
 urlpatterns += [
     path("api/", include(router.urls)),
