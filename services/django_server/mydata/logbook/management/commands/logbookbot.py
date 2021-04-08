@@ -15,6 +15,14 @@ from django.contrib.auth.models import User
 from django.core.files import File
 from django.core.management.base import BaseCommand
 from telegram import ChatAction
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+from telegram.ext.updater import Updater
+from telegram.ext.commandhandler import CommandHandler
+from telegram.ext.callbackqueryhandler import CallbackQueryHandler
+from telegram.callbackquery import CallbackQuery
+from telegram.ext.callbackcontext import CallbackContext
+
 from telegram.ext import CallbackContext
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 
@@ -233,6 +241,14 @@ def help_cmd(update, context):
     context.bot.send_message(chat_id=update.effective_chat.id, text=help_msg)
 
 
+def create_buttons(update: telegram.update.Update, context: CallbackContext, options: list):
+    keyboard = []
+    for o in options:
+        keyboard.append([InlineKeyboardButton(o[0], callback_data=str(o[1]))])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    return reply_markup
+
+
 class MyBot(Bot):
     def __init__(self, token: str, username: str):
         super().__init__(token)
@@ -259,6 +275,34 @@ class MyBot(Bot):
             msg = "Unknown setting"
             context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
 
+    def reply_query(self, update: telegram.update.Update, context: CallbackContext):
+        """
+        callback method handling button press
+        """
+        # getting the callback query
+        # documentation: https://python-telegram-bot.readthedocs.io/en/stable/telegram.callbackquery.html
+        query: CallbackQuery = update.callback_query
+
+        # CallbackQueries need to be answered, even if no notification to the user is needed
+        # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
+        # documentation: https://python-telegram-bot.readthedocs.io/en/stable/telegram.callbackquery.html#telegram.CallbackQuery.answer
+        query.answer()
+
+        # editing message sent by the bot
+        # documentation: https://python-telegram-bot.readthedocs.io/en/stable/telegram.callbackquery.html#telegram.CallbackQuery.edit_message_text
+        cmd = query.data.split(":")
+        res_text = []
+        if len(cmd) == 3:
+            if cmd[0] == "newkw":
+                kw = Keyword.objects.get(model=cmd[1])
+                kw.words.append(cmd[2])
+                kw.save()
+                res_text.append(f"New keyword created for {cmd[1]}. Current keywords are:")
+                res_text.append(", ".join(kw.words))
+        else:
+            res_text.append(f"Unknown reply: '{query.data}'.")
+        query.edit_message_text(text="\n".join(res_text))
+
     def download_files(self, message: Message, update: telegram.update.Update, context: CallbackContext) -> RawFile:
         """
         Download possible file attachment and store it to
@@ -284,6 +328,12 @@ class MyBot(Bot):
         else:
             timestamp = update.message.date
         print(f"Message time: {timestamp}")
+        """
+        TODO: 
+        - save Message only if there was a valid Keyword
+        - if message contains just the keyword, offer buttons
+        - split functionality to smaller functions
+        """
         msg = Message(text=msg_text, user=self.user, time=timestamp, source="telegram", json=update.to_dict())
         msg.save()
         rf = self.download_files(msg, update, context)
@@ -293,10 +343,24 @@ class MyBot(Bot):
             kws = Keyword.objects.filter(words__contains=[kw_str])
             if kws.count() == 1:
                 res_msg.append("Using {}.".format(kws[0].model))
-                obj = save_action(msg, strings, kws[0], timestamp)
-                print(obj)
+                if len(strings) > 1:
+                    obj = save_action(msg, strings, kws[0], timestamp)
+                    print(obj)
+                else:
+                    msgs = Message.objects.filter(text__istartswith=kw_str).order_by("time")[:5]
+                    for m in msgs:
+                        res_msg.append(m.text)
+
             else:
-                res_msg.append("Keyword '{}' not found.".format(kw_str))
+                reply_text = "Keyword '{}' not found. Choose one of these.".format(kw_str)
+                options = [["Activity"], ["Alcohol"], ["Drink"], ["Drug"], ["Nutrition"], ["Sensation"]]
+                for o in options:
+                    o.append(f"newkw:{o[0]}:{kw_str}")
+                options.insert(0, ["Cancel", "Cancel query"])
+                reply_markup = create_buttons(update, context, options)
+                update.message.reply_text(reply_text, reply_markup=reply_markup)
+                return
+                # res_msg.append("Keyword '{}' not found.".format(kw_str))
         else:
             res_msg.append("No message")
         if rf:
@@ -318,6 +382,8 @@ class MyBot(Bot):
         updater = Updater(token=self.token, use_context=True)
         dispatcher = updater.dispatcher
         dispatcher.add_handler(CommandHandler("help", help_cmd))
+        dispatcher.add_handler(CommandHandler("set", self.set_cmd))
+        dispatcher.add_handler(CallbackQueryHandler(self.reply_query))  # handling inline buttons pressing
         dispatcher.add_handler(MessageHandler(Filters.update.message, self.handle_message))
         dispatcher.add_handler(MessageHandler(Filters.update.edited_message, self.handle_edited_message))
         try:
