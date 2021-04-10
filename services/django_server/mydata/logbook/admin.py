@@ -1,63 +1,35 @@
 from django.contrib import admin
 
-from logbook.models import Alcohol, Drug, Drink, Sensation, Nutrition
-from logbook.models import Message, Keyword
+from logbook.models import Keyword, Message, Attachment, Record
 
 
 @admin.register(Keyword)
 class KeywordAdmin(admin.ModelAdmin):
-    list_display = ["words", "model"]
-    search_fields = ["words", "model"]
+    list_display = ["words", "type"]
+    search_fields = ["words", "type"]
 
 
 @admin.register(Message)
 class MessageAdmin(admin.ModelAdmin):
-    list_display = ["text", "get_file", "time"]
-    search_fields = [
-        "text",
-    ]
-    readonly_fields = [
-        "time",
-    ]
+    list_display = ["text", "get_attachment", "time"]
+    search_fields = ["text"]
+    readonly_fields = ["time"]
 
-    def get_file(self, obj):
-        files = obj.files.all()
-        if files:
-            return files[0].file.name
+    def get_attachment(self, obj):
+        attachments = obj.attachments.all()
+        if attachments:
+            return attachments[0].file.name
 
-    get_file.short_description = "File"
+    get_attachment.short_description = "Attachment"
 
 
-@admin.register(Alcohol)
-class AlcoholAdmin(admin.ModelAdmin):
-    list_display = ["type", "name", "abv", "volume", "time"]
-    search_fields = ["type", "name"]
+@admin.register(Record)
+class RecordAdmin(admin.ModelAdmin):
+    list_display = ["type", "name", "description", "quantity", "intensity", "abv", "volume", "time"]
+    search_fields = ["type", "name", "description"]
     readonly_fields = ["message"]
 
 
-@admin.register(Sensation)
-class SensationAdmin(admin.ModelAdmin):
-    list_display = ["type", "name", "intensity", "time"]
-    search_fields = ["type", "name"]
-    readonly_fields = ["message"]
-
-
-@admin.register(Nutrition)
-class NutritionAdmin(admin.ModelAdmin):
-    list_display = ["type", "name", "quantity", "time"]
-    search_fields = ["type", "name"]
-    readonly_fields = ["message"]
-
-
-@admin.register(Drug)
-class DrugAdmin(admin.ModelAdmin):
-    list_display = ["type", "name", "quantity", "time"]
-    search_fields = ["type", "name", "quantity"]
-    readonly_fields = ["message"]
-
-
-@admin.register(Drink)
-class DrinkAdmin(admin.ModelAdmin):
-    list_display = ["type", "name", "volume", "time"]
-    search_fields = ["type", "name"]
-    readonly_fields = ["message"]
+@admin.register(Attachment)
+class AttachmentAdmin(admin.ModelAdmin):
+    list_display = ["file"]

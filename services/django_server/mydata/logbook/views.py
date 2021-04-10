@@ -1,8 +1,8 @@
 from rest_framework import filters
 from rest_framework import viewsets
 
-from logbook.models import Alcohol, Drink, Nutrition, Activity, Drug, Message, Keyword, RawFile
-from logbook.serializers import MessageSerializer, KeywordSerializer, FileSerializer
+from logbook.models import Message, Keyword, Attachment
+from logbook.serializers import MessageSerializer, KeywordSerializer, AttachmentSerializer
 
 
 class FileViewSet(viewsets.ReadOnlyModelViewSet):
@@ -10,8 +10,9 @@ class FileViewSet(viewsets.ReadOnlyModelViewSet):
     API endpoint that allows Files to be viewed.
 
     """
-    queryset = RawFile.objects.all().order_by("-created_at")
-    serializer_class = FileSerializer
+
+    queryset = Attachment.objects.all().order_by("-created_at")
+    serializer_class = AttachmentSerializer
 
 
 class MessageViewSet(viewsets.ReadOnlyModelViewSet):
@@ -34,7 +35,7 @@ class KeywordViewSet(viewsets.ReadOnlyModelViewSet):
     **Search fields:** words, model
     """
 
-    queryset = Keyword.objects.all().order_by("model")
+    queryset = Keyword.objects.all().order_by("type")
     serializer_class = KeywordSerializer
     filter_backends = [filters.SearchFilter]
-    search_fields = ["words", "model"]
+    search_fields = ["words", "type"]
