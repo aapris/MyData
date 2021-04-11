@@ -1,50 +1,62 @@
 [
-{
-  "model": "logbook.keyword",
-  "pk": 1,
-  "fields": {
-    "words": "[\"food\", \"breakfast\", \"lunch\", \"dinner\", \"snack\", \"meal\"]",
-    "model": "Nutrition"
+  {
+    "model": "logbook.keyword",
+    "pk": 1,
+    "fields": {
+      "words": "[\"lunch\"]",
+      "type": "Nutrition",
+      "created_at": "2021-04-11T12:00:00Z",
+      "updated_at": "2021-04-11T12:00:00Z"
+    }
+  },
+  {
+    "model": "logbook.keyword",
+    "pk": 2,
+    "fields": {
+      "words": "[\"beverage\"]",
+      "type": "Alcohol",
+      "created_at": "2021-04-11T12:00:00Z",
+      "updated_at": "2021-04-11T12:00:00Z"
+    }
+  },
+  {
+    "model": "logbook.keyword",
+    "pk": 3,
+    "fields": {
+      "words": "[\"poo\"]",
+      "type": "Activity",
+      "created_at": "2021-04-11T12:00:00Z",
+      "updated_at": "2021-04-11T12:00:00Z"
+    }
+  },
+  {
+    "model": "logbook.keyword",
+    "pk": 4,
+    "fields": {
+      "words": "[\"pain\"]",
+      "type": "Sensation",
+      "created_at": "2021-04-11T12:00:00Z",
+      "updated_at": "2021-04-11T12:00:00Z"
+    }
+  },
+  {
+    "model": "logbook.keyword",
+    "pk": 5,
+    "fields": {
+      "words": "[\"water\"]",
+      "type": "Drink",
+      "created_at": "2021-04-11T12:00:00Z",
+      "updated_at": "2021-04-11T12:00:00Z"
+    }
+  },
+  {
+    "model": "logbook.keyword",
+    "pk": 6,
+    "fields": {
+      "words": "[\"medicine\"]",
+      "type": "Drug",
+      "created_at": "2021-04-11T12:00:00Z",
+      "updated_at": "2021-04-11T12:00:00Z"
+    }
   }
-},
-{
-  "model": "logbook.keyword",
-  "pk": 2,
-  "fields": {
-    "words": "[\"alcohol\", \"beer\", \"vine\"]",
-    "model": "Alcohol"
-  }
-},
-{
-  "model": "logbook.keyword",
-  "pk": 3,
-  "fields": {
-    "words": "[\"poo\", \"pee\", \"puke\", \"fart\"]",
-    "model": "Activity"
-  }
-},
-{
-  "model": "logbook.keyword",
-  "pk": 4,
-  "fields": {
-    "words": "[\"pain\", \"sensation\"]",
-    "model": "Sensation"
-  }
-},
-{
-  "model": "logbook.keyword",
-  "pk": 5,
-  "fields": {
-    "words": "[\"drink\", \"coffee\", \"tea\", \"water\", \"softdrink\"]",
-    "model": "Drink"
-  }
-},
-{
-  "model": "logbook.keyword",
-  "pk": 6,
-  "fields": {
-    "words": "[\"drug\", \"medicin\"]",
-    "model": "Drug"
-  }
-}
 ]
