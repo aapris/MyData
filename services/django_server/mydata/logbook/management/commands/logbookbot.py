@@ -1,11 +1,8 @@
-import datetime
 import json
 import logging
 import mimetypes
 import os
-import re
 from tempfile import TemporaryFile
-from typing import Optional
 
 import pytz
 import requests
@@ -17,37 +14,23 @@ from django.core.management.base import BaseCommand
 from telegram import ChatAction
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-from telegram.ext.updater import Updater
-from telegram.ext.commandhandler import CommandHandler
 from telegram.ext.callbackqueryhandler import CallbackQueryHandler
 from telegram.callbackquery import CallbackQuery
-from telegram.ext.callbackcontext import CallbackContext
 
 from telegram.ext import CallbackContext
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 
-from logbook.models import Alcohol, Keyword, Sensation, Drink, Nutrition, Drug, BaseLogbookModel
-from logbook.models import Message, RawFile
+from logbook.models import Keyword, Record, Profile
+from logbook.models import Message, Attachment
 from .mytelegrambot import Bot
 
 # TODO: remove debug prints
-
+# from logbook.utils import save_action, parse_time
 
 mimetypes.init()
 
-vol_units = {"l": 1, "dl": 0.1, "cl": 0.01, "ml": 0.001}
-weight_units = {"kg": 1, "g": 0.001}
 
-hhmm_re = re.compile(r"([-+])?(\d+):(\d\d)")
-minute_re = re.compile(r"([-+])?(\d+)")
-
-float_re = re.compile(r"(\d+\.\d+)")
-vol_re = re.compile(r"(\d+\.?\d*)({})".format("|".join(vol_units.keys())))
-weight_re = re.compile(r"(\d+\.?\d*)({})".format("|".join(weight_units.keys())))
-percentage_re = re.compile(r"(\d+\.?\d*)%")
-
-
-def download_to_file_field(url: str, filename: str, field: RawFile.file):
+def download_to_file_field(url: str, filename: str, field: Attachment.file):
     with TemporaryFile() as tf:
         r = requests.get(url, stream=True)
         for chunk in r.iter_content(chunk_size=4096):
@@ -56,182 +39,8 @@ def download_to_file_field(url: str, filename: str, field: RawFile.file):
         field.save(filename, File(tf), save=True)
 
 
-def parse_time(timezone: str, time_str: str, timestamp: Optional[datetime.datetime] = None) -> datetime.datetime:
-    """
-    Parse given string and return timezone aware datetime.
-    Time must be in one of following formats:
-
-    now, nyt, 0 or value missing: current time
-    -M: M minutes ago, "-10"
-    -HH:MM: HH:MM hours and minutes ago, "01:30"
-    HH:MM: at HH:MM today, "16:45"
-    """
-    if timestamp is None:
-        timestamp = datetime.datetime.utcnow().replace(tzinfo=pytz.utc)
-
-    # Parse HH:MM (-01:45, +00:20, 16:45) format
-    hhmm = hhmm_re.findall(time_str)
-    if hhmm:
-        hhmm = hhmm[0]
-        if hhmm[0] == "-":
-            timestamp = timestamp - datetime.timedelta(hours=int(hhmm[1]), minutes=int(hhmm[2]))
-        elif hhmm[0] == "+":
-            timestamp = timestamp + datetime.timedelta(hours=int(hhmm[1]), minutes=int(hhmm[2]))
-        else:
-            timestamp = timestamp.replace(hour=int(hhmm[1]), minute=int(hhmm[2]), second=0, microsecond=0)
-        timestamp = timestamp.replace(tzinfo=None)
-        timestamp = pytz.timezone(timezone).localize(timestamp)
-        return timestamp
-
-    # Parse -10, 10, +10 minutes format
-    minutes = minute_re.findall(time_str)
-    if minutes:
-        minutes = minutes[0]
-        if minutes[0] == "-":
-            return timestamp - datetime.timedelta(minutes=int(minutes[1]))
-        elif minutes[0] == "+":
-            return timestamp + datetime.timedelta(minutes=int(minutes[1]))
-    return timestamp
-
-
 def parse_message(msg: list):
     print(msg)
-
-
-def parse_single_match(words: list, compiled_re: re.Pattern) -> float:
-    """
-    Loop through words and try to match them to compiled_re.
-    Return match as a float.
-    Note: current word is removed from original list.
-    :param words: list of words
-    :param compiled_re:
-    :return: float volume
-    """
-    for i in range(len(words)):
-        w = words[i].replace(",", ".")
-        m = compiled_re.findall(w)
-        if m:
-            val = float(m[0])
-            words.pop(i)
-            return val
-
-
-def parse_dup_match(words: list, compiled_re: re.Pattern, units: dict) -> float:
-    """
-    Loop through words and return a float, if a volume string (1dl, 0.5l etc) is found.
-    Note: current word is removed from original list.
-    :param words: list of words
-    :param compiled_re:
-    :param units:
-    :return: float volume
-    """
-    for i in range(len(words)):
-        w = words[i].replace(",", ".")
-        m = compiled_re.findall(w)
-        if m:
-            val = float(m[0][0]) * units[m[0][1]]
-            words.pop(i)
-            return val
-
-
-def parse_volume(words: list) -> float:
-    return parse_dup_match(words, vol_re, vol_units)
-
-
-def parse_weight(words: list) -> float:
-    """
-    Loop through words and return a float, if a weight string (1kg, 400g etc) is found.
-    """
-    return parse_dup_match(words, weight_re, weight_units)
-
-
-def parse_percentage(words: list) -> float:
-    """
-    Loop through words and return a float, if a % string (2%, 4.7% etc) is found.
-    """
-    return parse_single_match(words, percentage_re)
-
-
-def parse_float(words: list) -> float:
-    """
-    Loop through words and return a float, if a float is found.
-    """
-    return parse_single_match(words, float_re)
-
-
-def save_alcohol(words: list) -> Alcohol:
-    """
-    Parse details from message text and save an Alcohol instance.
-    :param words: original message tokenized
-    """
-    vol = parse_volume(words)
-    percentage = parse_percentage(words)
-    return Alcohol(abv=percentage, volume=vol)
-
-
-def save_sensation(words: list) -> Sensation:
-    """
-    Parse details from message text and save a Sensation instance.
-    :param words: original message tokenized
-    :return: created object
-    """
-    intensity = parse_float(words)
-    return Sensation(intensity=intensity)
-
-
-def save_drink(words: list) -> Drink:
-    """
-    Parse details from message text and save a Drink instance.
-    :param words: original message text tokenized
-    :return: created object
-    """
-    vol = parse_volume(words)
-    return Drink(volume=vol)
-
-
-def save_nutrition(words: list) -> Nutrition:
-    """
-    Parse details from message text and save a Nutrition instance.
-    :param words: original message's text tokenized
-    :return: created object
-    """
-    weight = parse_weight(words)
-    return Nutrition(quantity=weight)
-
-
-def save_drug(words: list) -> Drug:
-    """
-    Parse details from message text and save a Drug instance.
-    :param words: original message's text tokenized
-    :return: created object
-    """
-    weight = parse_weight(words)
-    return Drug(quantity=weight)
-
-
-def save_action(message: Message, words: list, keyword: Keyword, timestamp: datetime.datetime) -> BaseLogbookModel:
-    obj = None
-    if keyword.model == "Alcohol":
-        obj = save_alcohol(words)
-    elif keyword.model == "Drug":
-        obj = save_drug(words)
-    elif keyword.model == "Nutrition":
-        obj = save_nutrition(words)
-    elif keyword.model == "Drink":
-        obj = save_drink(words)
-    elif keyword.model == "Sensation":
-        obj = save_sensation(words)
-    elif keyword.model == "Activity":
-        pass
-    if obj:
-        obj.message = message
-        obj.user = message.user
-        obj.keyword = keyword.model
-        obj.type = words[0].lower()
-        obj.name = " ".join(words)
-        obj.time = timestamp
-        obj.save()
-        return obj
 
 
 def help_cmd(update, context):
@@ -254,6 +63,8 @@ class MyBot(Bot):
         super().__init__(token)
         self.user = User.objects.get(username=username)
         self.timezone = settings.TIME_ZONE
+        if hasattr(self.user, "profile") is False:  # Create a Profile for User, if it doesn't exist
+            Profile.objects.create(user=self.user, timezone=self.timezone)
 
     def set_cmd(self, update: telegram.update.Update, context: CallbackContext):
         print(json.dumps(update.to_dict(), indent=2))
@@ -277,7 +88,7 @@ class MyBot(Bot):
 
     def reply_query(self, update: telegram.update.Update, context: CallbackContext):
         """
-        callback method handling button press
+        Callback method handling button press.
         """
         # getting the callback query
         # documentation: https://python-telegram-bot.readthedocs.io/en/stable/telegram.callbackquery.html
@@ -294,16 +105,18 @@ class MyBot(Bot):
         res_text = []
         if len(cmd) == 3:
             if cmd[0] == "newkw":
-                kw = Keyword.objects.get(model=cmd[1])
-                kw.words.append(cmd[2])
+                kw = Keyword.objects.get(type=cmd[1])
+                kw.words.append(cmd[2].lower())
                 kw.save()
                 res_text.append(f"New keyword created for {cmd[1]}. Current keywords are:")
                 res_text.append(", ".join(kw.words))
+                res_text.append("You must now edit original message to make it processed properly.")
+                res_text.append("Add a new space character between some words.")
         else:
             res_text.append(f"Unknown reply: '{query.data}'.")
         query.edit_message_text(text="\n".join(res_text))
 
-    def download_files(self, message: Message, update: telegram.update.Update, context: CallbackContext) -> RawFile:
+    def download_files(self, message: Message, update: telegram.update.Update, context: CallbackContext) -> Attachment:
         """
         Download possible file attachment and store it to
         """
@@ -311,58 +124,37 @@ class MyBot(Bot):
         if _file:
             url = _file["url"]
             logging.info(f"Downloading file from {url}")
-            rf = RawFile(mimetype=_file["mime_type"], message=message)
+            rf = Attachment(mimetype=_file["mime_type"], message=message)
             download_to_file_field(url, _file["name"], rf.file)
             return rf
 
     def handle_message(self, update: telegram.update.Update, context: CallbackContext):
         context.bot.send_chat_action(chat_id=update.effective_message.chat_id, action=ChatAction.TYPING)
+        res_msg = []
         print(json.dumps(update.to_dict(), indent=2))
         msg_text = self.get_message_text(update)
-        # Generate list of strings in message text
-        strings = [x for x in msg_text.split(" ") if x]
-        # Try to find time shift string
-        # TODO: use timeformat with t postfix or something
-        if len(strings) > 1:
-            timestamp = parse_time(self.timezone, strings[1], update.message.date)
-        else:
-            timestamp = update.message.date
+        message_identifier = self.get_message_identifier(update)
+        timestamp = update.message.date
         print(f"Message time: {timestamp}")
-        """
-        TODO: 
-        - save Message only if there was a valid Keyword
-        - if message contains just the keyword, offer buttons
-        - split functionality to smaller functions
-        """
-        msg = Message(text=msg_text, user=self.user, time=timestamp, source="telegram", json=update.to_dict())
-        msg.save()
-        rf = self.download_files(msg, update, context)
-        res_msg = []
-        if strings:  # E.g. location has empty text
-            kw_str = strings[0].lower()
-            kws = Keyword.objects.filter(words__contains=[kw_str])
-            if kws.count() == 1:
-                res_msg.append("Using {}.".format(kws[0].model))
-                if len(strings) > 1:
-                    obj = save_action(msg, strings, kws[0], timestamp)
-                    print(obj)
-                else:
-                    msgs = Message.objects.filter(text__istartswith=kw_str).order_by("time")[:5]
-                    for m in msgs:
-                        res_msg.append(m.text)
-
-            else:
-                reply_text = "Keyword '{}' not found. Choose one of these.".format(kw_str)
-                options = [["Activity"], ["Alcohol"], ["Drink"], ["Drug"], ["Nutrition"], ["Sensation"]]
-                for o in options:
-                    o.append(f"newkw:{o[0]}:{kw_str}")
-                options.insert(0, ["Cancel", "Cancel query"])
-                reply_markup = create_buttons(update, context, options)
-                update.message.reply_text(reply_text, reply_markup=reply_markup)
-                return
-                # res_msg.append("Keyword '{}' not found.".format(kw_str))
+        msg = Message.objects.create(
+            text=msg_text, source="TG", source_id=message_identifier, user=self.user, time=timestamp,
+            json=json.dumps(update.to_dict()),
+        )
+        rec: Record = msg.update_record()
+        if rec is None:
+            res_msg.append("Record not found")
+            kw_str = msg_text.split()[0]
+            reply_text = "Keyword '{}' not found. Choose one of these or cancel.".format(kw_str)
+            options = [[k.type] for k in Keyword.objects.order_by("type")]
+            for o in options:
+                o.append(f"newkw:{o[0]}:{kw_str}")
+            options.insert(0, ["Cancel", "Cancel query"])
+            reply_markup = create_buttons(update, context, options)
+            update.message.reply_text(reply_text, reply_markup=reply_markup)
+            return
         else:
-            res_msg.append("No message")
+            res_msg.append(f"Record {rec}")
+        rf = self.download_files(msg, update, context)
         if rf:
             res_msg.append(f"Saved to {rf.file.name}.")
             if rf.mimetype.startswith("image"):
@@ -370,12 +162,21 @@ class MyBot(Bot):
         context.bot.send_message(chat_id=update.effective_chat.id, text="\n".join(res_msg))
 
     def handle_edited_message(self, update: telegram.update.Update, context: CallbackContext):
-        # TODO: implement editing old Messages using edited_messages
+        # NOTE: work in progress
+        # TODO: finish implement editing old Messages using edited_messages
         context.bot.send_chat_action(chat_id=update.effective_message.chat_id, action=ChatAction.TYPING)
         print(json.dumps(update.to_dict(), indent=2))
+        message_identifier = self.get_message_identifier(update)
+        msg = Message.objects.get(source_id=message_identifier)
         res_msg = ["Thank you for editing a message."]
         t = self.get_message_text(update)
+        msg.text = t
+        msg.json = json.dumps(update.to_dict())
+        msg.update_record()
         print(f"EDITED {t}")
+        msg.save()
+        if hasattr(msg, "record"):
+            res_msg.append(f"Record {msg.record}")
         context.bot.send_message(chat_id=update.effective_chat.id, text="\n".join(res_msg))
 
     def poll_forever(self):

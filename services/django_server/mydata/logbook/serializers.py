@@ -2,7 +2,7 @@ from django.contrib.auth.models import User
 from rest_framework import serializers
 from rest_framework.relations import PrimaryKeyRelatedField
 
-from logbook.models import Alcohol, Drink, Nutrition, Activity, Drug, Message, Keyword, RawFile
+from logbook.models import Message, Keyword, Attachment
 
 
 class KeywordSerializer(serializers.HyperlinkedModelSerializer):
@@ -11,13 +11,13 @@ class KeywordSerializer(serializers.HyperlinkedModelSerializer):
         fields = [
             "id",
             "words",
-            "model",
+            "type",
         ]
 
 
-class FileSerializer(serializers.HyperlinkedModelSerializer):
+class AttachmentSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
-        model = RawFile
+        model = Attachment
         fields = [
             "id",
             "file",
@@ -28,7 +28,7 @@ class FileSerializer(serializers.HyperlinkedModelSerializer):
 class MessageSerializer(serializers.HyperlinkedModelSerializer):
     #    files = FileSerializer()
     #    files = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
-    files = serializers.HyperlinkedRelatedField(many=True, read_only=True, view_name='rawfile-detail')
+    attachments = serializers.HyperlinkedRelatedField(many=True, read_only=True, view_name="attachment-detail")
 
     user = PrimaryKeyRelatedField(queryset=User.objects.all())
 
@@ -37,7 +37,7 @@ class MessageSerializer(serializers.HyperlinkedModelSerializer):
         fields = [
             "id",
             "user",
-            "files",
+            "attachments",
             "status",
             "time",
             "text",

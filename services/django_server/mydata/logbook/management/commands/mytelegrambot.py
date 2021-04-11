@@ -5,6 +5,7 @@ import os
 import sys
 import time
 from abc import ABC, abstractmethod
+from typing import Optional
 
 import requests
 import telegram
@@ -96,6 +97,19 @@ class Bot(ABC):
         msg_text = self.set_media_group_id(update, msg_text)
         return msg_text
 
+    def get_message_identifier(self, update: telegram.update.Update) -> Optional[str]:
+        """
+        Find out chat id and message_id from message.
+
+        :param update: Telegram Update
+        :return: message identifier
+        """
+        updict = update.to_dict()
+        for msg_key in ["message", "edited_message"]:
+            if msg_key in updict:
+                message = updict[msg_key]
+                return "{}:{}".format(message["chat"]["id"], message["message_id"])
+
     def set_media_group_id(self, update: telegram.update.Update, msg_text: str) -> str:
         """
         If media_group_id is present, this Update is part of multi-file post.
@@ -105,7 +119,11 @@ class Bot(ABC):
         :param msg_text: text or caption from Update
         :return:
         """
-        msg = update.to_dict()["message"]
+        updict = update.to_dict()
+        if "message" in updict:
+            msg = updict["message"]
+        elif "edited_message" in updict:
+            msg = updict["edited_message"]
         # First Update has media_group_id and text/caption present
         if "media_group_id" in msg:
             if msg_text != "":
