@@ -13,19 +13,15 @@ from django.core.files import File
 from django.core.management.base import BaseCommand
 from telegram import ChatAction
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-
-from telegram.ext.callbackqueryhandler import CallbackQueryHandler
 from telegram.callbackquery import CallbackQuery
-
 from telegram.ext import CallbackContext
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
+from telegram.ext.callbackqueryhandler import CallbackQueryHandler
 
 from logbook.models import Keyword, Record, Profile
 from logbook.models import Message, Attachment
+from logbook.utils import sanitize_keyword
 from .mytelegrambot import Bot
-
-# TODO: remove debug prints
-# from logbook.utils import save_action, parse_time
 
 mimetypes.init()
 
@@ -143,7 +139,7 @@ class MyBot(Bot):
         rec: Record = msg.update_record()
         if rec is None:
             res_msg.append("Record not found")
-            kw_str = msg_text.split()[0]
+            kw_str = sanitize_keyword(msg_text.split()[0])
             reply_text = "Keyword '{}' not found. Choose one of these or cancel.".format(kw_str)
             options = [[k.type] for k in Keyword.objects.order_by("type")]
             for o in options:

@@ -1,17 +1,22 @@
 import datetime
 import re
-from typing import Optional
+from typing import Optional, Pattern
 
 import pytz
 
 vol_units = {"l": 1, "dl": 0.1, "cl": 0.01, "ml": 0.001}
 weight_units = {"kg": 1, "g": 0.001, "mg": 0.000001}
-hhmm_re = re.compile(r"([-+])?(\d+):(\d\d)")
-minute_re = re.compile(r"([-+])(\d+)m")
-float_re = re.compile(r"(\d+\.\d+)")
-vol_re = re.compile(r"(\d+\.?\d*)({})".format("|".join(vol_units.keys())))
-weight_re = re.compile(r"(\d+\.?\d*)({})".format("|".join(weight_units.keys())))
-percentage_re = re.compile(r"(\d+\.?\d*)%")
+kw_re: Pattern[str] = re.compile(r"[^\w]")
+hhmm_re: Pattern[str] = re.compile(r"([-+])?(\d+):(\d\d)")
+minute_re: Pattern[str] = re.compile(r"([-+])(\d+)m")
+float_re: Pattern[str] = re.compile(r"(\d+\.\d+)")
+vol_re: Pattern[str] = re.compile(r"(\d+\.?\d*)({})".format("|".join(vol_units.keys())))
+weight_re: Pattern[str] = re.compile(r"(\d+\.?\d*)({})".format("|".join(weight_units.keys())))
+percentage_re: Pattern[str] = re.compile(r"(\d+\.?\d*)%")
+
+
+def sanitize_keyword(s: str) -> str:
+    return kw_re.sub('', s).lower()
 
 
 def parse_single_match(words: list, compiled_re: re.Pattern) -> float:
