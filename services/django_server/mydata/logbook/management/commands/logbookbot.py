@@ -13,19 +13,15 @@ from django.core.files import File
 from django.core.management.base import BaseCommand
 from telegram import ChatAction
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-
-from telegram.ext.callbackqueryhandler import CallbackQueryHandler
 from telegram.callbackquery import CallbackQuery
-
 from telegram.ext import CallbackContext
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
+from telegram.ext.callbackqueryhandler import CallbackQueryHandler
 
 from logbook.models import Keyword, Record, Profile
 from logbook.models import Message, Attachment
+from logbook.utils import sanitize_keyword
 from .mytelegrambot import Bot
-
-# TODO: remove debug prints
-# from logbook.utils import save_action, parse_time
 
 mimetypes.init()
 
@@ -61,7 +57,9 @@ def create_buttons(update: telegram.update.Update, context: CallbackContext, opt
 class MyBot(Bot):
     def __init__(self, token: str, username: str):
         super().__init__(token)
-        self.user = User.objects.get(username=username)
+        self.user, created = User.objects.get_or_create(username=username)
+        if created:
+            logging.warning(f"Created a new user {username}")
         self.timezone = settings.TIME_ZONE
         if hasattr(self.user, "profile") is False:  # Create a Profile for User, if it doesn't exist
             Profile.objects.create(user=self.user, timezone=self.timezone)
@@ -143,7 +141,7 @@ class MyBot(Bot):
         rec: Record = msg.update_record()
         if rec is None:
             res_msg.append("Record not found")
-            kw_str = msg_text.split()[0]
+            kw_str = sanitize_keyword(msg_text.split()[0])
             reply_text = "Keyword '{}' not found. Choose one of these or cancel.".format(kw_str)
             options = [[k.type] for k in Keyword.objects.order_by("type")]
             for o in options:
@@ -200,25 +198,23 @@ class Command(BaseCommand):
             action="store",
             dest="log",
             type=str,
-            default="ERROR",
+            default="INFO",
             choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
             help="Log level",
         )
-
-        parser.add_argument("--token", action="store", dest="token", required=True, help="Bot token")
-
-        parser.add_argument("--username", action="store", dest="username", required=True, help="username")
+        parser.add_argument("--token", help="Bot token", default=os.getenv("LOGBOOKBOT_TOKEN"))
+        parser.add_argument("--username", help="Django username", default=os.getenv("DJANGO_USERNAME"))
 
     def handle(self, *args, **options):
         logging.basicConfig(format="%(asctime)s %(levelname)-8s %(message)s", level=getattr(logging, options["log"]))
         logging.info("Start bot")
-        print(options)
         token = options.get("token")
+        username = options.get("username")
         if token is None:
-            token = os.getenv("LOGBOOKBOT_TOKEN")
-            if token is None:
-                print("You must give bot token with --token argument or in LOGBOOKBOT_TOKEN environment variable")
-                exit(1)
-        username = options["username"]
+            print("You must give bot token with --token argument or in LOGBOOKBOT_TOKEN environment variable")
+            exit(1)
+        if username is None:
+            print("You must give username with --username argument or in DJANGO_USERNAME environment variable")
+            exit(1)
         bot = MyBot(token, username)
         bot.poll_forever()

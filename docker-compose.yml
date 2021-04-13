@@ -4,14 +4,14 @@ x-base: &base
   env_file:
     - ./.env.dev
 services:
-#  python:
-#    <<: *base
-#    build: ./services/django_server
-#    command: python manage.py
-#    depends_on:
-#      - db
-#    volumes:
-#      - ./services/python/:/usr/src/app/
+  python:
+    <<: *base
+    build: ./services/django_server
+    command: python manage.py logbookbot
+    depends_on:
+      - db
+    volumes:
+      - ./services/django_server:/app
   django_server:
     <<: *base
     build: ./services/django_server

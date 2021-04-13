@@ -128,7 +128,7 @@ def record_from_message(message: Message) -> Record:
     """
     words = message.text.split()
     if words:  # E.g. location has empty text
-        kw_str = words.pop(0).lower()
+        kw_str = logbook.utils.sanitize_keyword(words.pop(0))
         kws = Keyword.objects.filter(words__contains=[kw_str])
         if kws.count() == 1:
             if len(words) > 0:
