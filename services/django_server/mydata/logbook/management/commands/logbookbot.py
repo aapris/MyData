@@ -139,7 +139,7 @@ class MyBot(Bot):
             json=json.dumps(update.to_dict()),
         )
         rec: Record = msg.update_record()
-        if rec is None:
+        if rec is None and msg_text != "":
             res_msg.append("Record not found")
             kw_str = sanitize_keyword(msg_text.split()[0])
             reply_text = "Keyword '{}' not found. Choose one of these or cancel.".format(kw_str)
