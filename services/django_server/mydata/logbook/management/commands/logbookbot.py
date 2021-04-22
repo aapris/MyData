@@ -2,7 +2,9 @@ import json
 import logging
 import mimetypes
 import os
+from collections import Counter
 from tempfile import TemporaryFile
+from typing import List
 
 import pytz
 import requests
@@ -52,6 +54,62 @@ def create_buttons(update: telegram.update.Update, context: CallbackContext, opt
         keyboard.append([InlineKeyboardButton(o[0], callback_data=str(o[1]))])
     reply_markup = InlineKeyboardMarkup(keyboard)
     return reply_markup
+
+
+def create_buttons_edit(update: telegram.update.Update, context: CallbackContext, options: list):
+    keyboard = []
+    for o in options:
+        keyboard.append([InlineKeyboardButton(o[0], switch_inline_query_current_chat=str(o[1]))])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    return reply_markup
+
+
+def strip_trailing_zeroes(num) -> str:
+    """Remove trailing zeroes, e.g. 0.500 --> 0.5 and 1.000 -> 1"""
+    s = "{:.3f}".format(num)
+    return s.rstrip("0").rstrip(".") if "." in s else s
+
+
+def create_message(kw_str, r):
+    words = [kw_str, r.description]
+    if r.quantity is not None:
+        words.append("{}g".format(strip_trailing_zeroes(r.quantity / 1000)))
+    if r.abv is not None:
+        words.append("{}%".format(strip_trailing_zeroes(r.abv)))
+    if r.volume is not None:
+        words.append("{}l".format(strip_trailing_zeroes(r.volume)))
+    return words
+
+
+def options_for_keyword(kw_str, count=3) -> list:
+    records = Record.objects.filter(name=kw_str).order_by("-time")
+    # Grab latest unique messages for this keyword
+    latest_descriptions = []
+    latest_messages = []
+    for r in records:
+        if r.description not in latest_descriptions:
+            latest_descriptions.append(r.description)
+            latest_messages.append(create_message(kw_str, r))
+        if len(latest_descriptions) == count:
+            break
+    # Grab most common messages for this keyword
+    common_messages = []
+    descriptions = [r.description for r in records[:100]]
+    occurrences = Counter(descriptions)
+    most_common = [o[0] for o in occurrences.most_common()]
+    for r in most_common:
+        r = records.filter(description=r)[0]
+        message = create_message(kw_str, r)
+        if message not in latest_messages:
+            common_messages.append(message)
+        if len(common_messages) == count:
+            break
+    all_messages = latest_messages + common_messages
+    # Create list of latest and most common messages
+    options = [[" ".join(m)] for m in all_messages]
+    for o in options:
+        o.append(o[0])
+    return options
 
 
 class MyBot(Bot):
@@ -131,23 +189,34 @@ class MyBot(Bot):
         res_msg = []
         print(json.dumps(update.to_dict(), indent=2))
         msg_text = self.get_message_text(update)
+        if msg_text.startswith("@"):
+            words = msg_text.split()
+            words.pop(0)
+            msg_text = " ".join(words)
         message_identifier = self.get_message_identifier(update)
         timestamp = update.message.date
-        print(f"Message time: {timestamp}")
+        logging.info(f"Message time: {timestamp}, text: {msg_text}")
         msg = Message.objects.create(
             text=msg_text, source="TG", source_id=message_identifier, user=self.user, time=timestamp,
             json=json.dumps(update.to_dict()),
         )
         rec: Record = msg.update_record()
         if rec is None and msg_text != "":
-            res_msg.append("Record not found")
+            # res_msg.append("Record not found")
             kw_str = sanitize_keyword(msg_text.split()[0])
-            reply_text = "Keyword '{}' not found. Choose one of these or cancel.".format(kw_str)
-            options = [[k.type] for k in Keyword.objects.order_by("type")]
-            for o in options:
-                o.append(f"newkw:{o[0]}:{kw_str}")
-            options.insert(0, ["Cancel", "Cancel query"])
-            reply_markup = create_buttons(update, context, options)
+            kws = Keyword.objects.filter(words__contains=[kw_str])
+            if kws.count() == 1:  # keyword found, requested latest records?
+                reply_text = "Keyword '{}' found. Choose one of these or cancel.".format(kw_str)
+                options = options_for_keyword(kw_str, 3)
+                options.insert(0, ["Cancel", "Cancel query"])
+                reply_markup = create_buttons_edit(update, context, options)
+            else:
+                reply_text = "Keyword '{}' not found. Choose one of these or cancel.".format(kw_str)
+                options = [[k.type] for k in Keyword.objects.order_by("type")]
+                for o in options:
+                    o.append(f"newkw:{o[0]}:{kw_str}")
+                options.insert(0, ["Cancel", "Cancel query"])
+                reply_markup = create_buttons(update, context, options)
             update.message.reply_text(reply_text, reply_markup=reply_markup)
             return
         else:
