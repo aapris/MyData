@@ -13,6 +13,8 @@ from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.files import File
 from django.core.management.base import BaseCommand
+from django.utils import translation
+from django.utils.translation import gettext as _
 from telegram import ChatAction
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.callbackquery import CallbackQuery
@@ -29,6 +31,7 @@ mimetypes.init()
 
 
 def download_to_file_field(url: str, filename: str, field: Attachment.file):
+    """Download a file from internet and save it into a FileField"""
     with TemporaryFile() as tf:
         r = requests.get(url, stream=True)
         for chunk in r.iter_content(chunk_size=4096):
@@ -37,22 +40,20 @@ def download_to_file_field(url: str, filename: str, field: Attachment.file):
         field.save(filename, File(tf), save=True)
 
 
-def parse_message(msg: list):
-    print(msg)
-
-
 def help_cmd(update, context):
+    """Send help text"""
     help_msg = "\n".join(
         [
-            "Available commands:",
-            "/help This message",
-            "/show keyword: show latest records of keyword",
+            _("Available commands:"),
+            _("/help This message"),
+            _("/show keyword: show latest records of keyword"),
         ]
     )
     context.bot.send_message(chat_id=update.effective_chat.id, text=help_msg)
 
 
-def create_buttons(update: telegram.update.Update, context: CallbackContext, options: list):
+def create_buttons(options: list) -> InlineKeyboardMarkup:
+    """Create inline keyboard, which sends button data straight to to bot"""
     keyboard = []
     for o in options:
         keyboard.append([InlineKeyboardButton(o[0], callback_data=str(o[1]))])
@@ -60,7 +61,8 @@ def create_buttons(update: telegram.update.Update, context: CallbackContext, opt
     return reply_markup
 
 
-def create_buttons_edit(update: telegram.update.Update, context: CallbackContext, options: list):
+def create_buttons_edit(options: list) -> InlineKeyboardMarkup:
+    """Create inline keyboard, which set button data to user text input field"""
     keyboard = []
     for o in options:
         keyboard.append([InlineKeyboardButton(o[0], switch_inline_query_current_chat=str(o[1]))])
@@ -75,6 +77,7 @@ def strip_trailing_zeroes(num) -> str:
 
 
 def create_message(kw_str, r) -> List[str]:
+    """Create list of """
     words = [kw_str, r.description]
     if r.quantity is not None:
         words.append("{}g".format(strip_trailing_zeroes(r.quantity * 1000)))
@@ -86,6 +89,7 @@ def create_message(kw_str, r) -> List[str]:
 
 
 def options_for_keyword(kw_str, count=3) -> list:
+    """Create list of the latest and the most common messages of this keyword."""
     records = Record.objects.filter(name=kw_str).order_by("-time")
     # Grab latest unique messages for this keyword
     latest_descriptions = []
@@ -123,37 +127,63 @@ class MyBot(Bot):
         if created:
             logging.warning(f"Created a new user {username}")
         self.timezone = settings.TIME_ZONE
+        self.language = settings.LANGUAGE_CODE
+        translation.activate(self.language)
         if hasattr(self.user, "profile") is False:  # Create a Profile for User, if it doesn't exist
             Profile.objects.create(user=self.user, timezone=self.timezone)
 
+    def setenv(self):
+        """Set up environment for this thread."""
+        translation.activate(self.language)
+
     def set_cmd(self, update: telegram.update.Update, context: CallbackContext):
+        self.setenv()
         print(json.dumps(update.to_dict(), indent=2))
         words = update.message.text.split()
         words.pop(0)  # Remove /set
         if len(words) == 0:
-            context.bot.send_message(chat_id=update.effective_chat.id, text="Empty command")
-        cmd = words.pop(0)
+            msg_lines = [
+                _("Add some of these after /set:"),
+                "- tz, timezone",
+                "- lang, language",
+            ]
+            context.bot.send_message(chat_id=update.effective_chat.id, text="\n".join(msg_lines))
+            return
+        if len(words) == 1:
+            msg_lines = [
+                _("Empty command"),
+                _("You should add value for command too"),
+            ]
+            context.bot.send_message(chat_id=update.effective_chat.id, text="\n".join(msg_lines))
+            return
+        cmd = words[0]
+        val = words[1]
         if cmd in ["tz", "timezone"]:
-            tz = [s for s in pytz.all_timezones if "helsinki".lower() in s.lower()]
+            tz = [s for s in pytz.all_timezones if val.lower() in s.lower()]
             if len(tz) == 1:
                 self.timezone = tz[0]
-                msg = f"Set timezone to {self.timezone}"
+                msg = _("Set timezone to %(tz)s") % {"tz": self.timezone}
                 context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
             else:
-                msg = "Found many:\n" + "\n- ".join(tz)
+                msg = _("Found many") + ":\n" + "\n- ".join(tz)
                 context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
+        if cmd in ["lang", "language"]:
+            self.language = val
+            msg = _("Language set to %(lang)s") % {"lang": val}
+            context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
         else:
-            msg = "Unknown setting"
+            msg = _("Unknown setting")
             context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
 
     def show_cmd(self, update: telegram.update.Update, context: CallbackContext):
+        self.setenv()
         print(json.dumps(update.to_dict(), indent=2))
         msg = []
         words = update.message.text.split()
         words.pop(0)  # Remove /show
         if len(words) == 0:
             keywords = ", ".join([k[0] for k in Keyword.objects.values_list("type").order_by("type")])
-            msg.append(f"Add keyword after show command, e.g. one of {keywords}")
+            msg.append(_("Add keyword after show command, e.g. one of %(keywords)s") % {"keywords": keywords})
             context.bot.send_message(chat_id=update.effective_chat.id, text="\n".join(msg))
             return
         kw_str = words[0]
@@ -162,26 +192,30 @@ class MyBot(Bot):
             records = Record.objects.filter(keyword=keywords[0]).order_by("-time")
         else:
             records = Record.objects.filter(name=kw_str).order_by("-time")
-        for r in records[:10]:
-            tstr = r.time.astimezone(pytz.timezone(self.timezone)).strftime("%d.%m %H:%M")
-            msg.append("{} {}".format(tstr, " ".join(create_message(r.name, r))))
+        if records:
+            for r in records[:10]:
+                tstr = r.time.astimezone(pytz.timezone(self.timezone)).strftime("%d.%m %H:%M")
+                msg.append("{} {}".format(tstr, " ".join(create_message(r.name, r))))
+        else:
+            msg.append(_("No records for keyword %(kw_str)s found.") % {"kw_str": kw_str})
         context.bot.send_message(chat_id=update.effective_chat.id, text="\n".join(msg))
 
     def reply_query(self, update: telegram.update.Update, context: CallbackContext):
         """
         Callback method handling button press.
         """
+        self.setenv()
         # getting the callback query
-        # documentation: https://python-telegram-bot.readthedocs.io/en/stable/telegram.callbackquery.html
+        # https://python-telegram-bot.readthedocs.io/en/stable/telegram.callbackquery.html
         query: CallbackQuery = update.callback_query
 
         # CallbackQueries need to be answered, even if no notification to the user is needed
         # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
-        # documentation: https://python-telegram-bot.readthedocs.io/en/stable/telegram.callbackquery.html#telegram.CallbackQuery.answer
+        # https://python-telegram-bot.readthedocs.io/en/stable/telegram.callbackquery.html#telegram.CallbackQuery.answer
         query.answer()
 
         # editing message sent by the bot
-        # documentation: https://python-telegram-bot.readthedocs.io/en/stable/telegram.callbackquery.html#telegram.CallbackQuery.edit_message_text
+        # https://python-telegram-bot.readthedocs.io/en/stable/telegram.callbackquery.html#telegram.CallbackQuery.edit_message_text
         cmd = query.data.split(":")
         res_text = []
         if len(cmd) == 3:
@@ -189,12 +223,12 @@ class MyBot(Bot):
                 kw = Keyword.objects.get(type=cmd[1])
                 kw.words.append(cmd[2].lower())
                 kw.save()
-                res_text.append(f"New keyword created for {cmd[1]}. Current keywords are:")
+                res_text.append(_("New keyword created for %(kws)s. Current keywords are:") % {"kws": cmd[1]})
                 res_text.append(", ".join(kw.words))
-                res_text.append("You must now edit original message to make it processed properly.")
-                res_text.append("Add a new space character between some words.")
+                res_text.append(_("You must now edit original message to make it processed properly."))
+                res_text.append(_("Add a new space character between some words."))
         else:
-            res_text.append(f"Unknown reply: '{query.data}'.")
+            res_text.append(_("Unknown reply: '%(data)s'.") % {"data": query.data})
         query.edit_message_text(text="\n".join(res_text))
 
     def download_files(self, message: Message, update: telegram.update.Update, context: CallbackContext) -> Attachment:
@@ -233,17 +267,17 @@ class MyBot(Bot):
             # res_msg.append("Record not found")
             kws = Keyword.objects.filter(words__contains=[kw_str])
             if kws.count() == 1:  # keyword found, requested latest records?
-                reply_text = "Keyword '{}' found. Choose one of these or cancel.".format(kw_str)
+                reply_text = _("Keyword '%(kw_str)s' found. Choose one of these or cancel:") % {"kw_str": kw_str}
                 options = options_for_keyword(kw_str, 3)
-                options.insert(0, ["Cancel", ""])
-                reply_markup = create_buttons_edit(update, context, options)
+                options.insert(0, [_("Cancel"), ""])
+                reply_markup = create_buttons_edit(options)
             else:
-                reply_text = "Keyword '{}' not found. Choose one of these or cancel.".format(kw_str)
+                reply_text = _("Keyword '%(kw_str)s' not found. Choose one of these or cancel:") % {"kw_str": kw_str}
                 options = [[k.type] for k in Keyword.objects.order_by("type")]
                 for o in options:
                     o.append(f"newkw:{o[0]}:{kw_str}")
-                options.insert(0, ["Cancel", "Cancel query"])
-                reply_markup = create_buttons(update, context, options)
+                options.insert(0, [_("Cancel"), "Cancel query"])
+                reply_markup = create_buttons(options)
             update.message.reply_text(reply_text, reply_markup=reply_markup)
             return
         else:
@@ -262,7 +296,7 @@ class MyBot(Bot):
         print(json.dumps(update.to_dict(), indent=2))
         message_identifier = self.get_message_identifier(update)
         msg = Message.objects.get(source_id=message_identifier)
-        res_msg = ["Thank you for editing a message."]
+        res_msg = [_("Thank you for editing a message.")]
         t = self.get_message_text(update)
         msg.text = t
         msg.json = json.dumps(update.to_dict())
