@@ -114,9 +114,9 @@ def options_for_keyword(kw_str, count=3) -> list:
             break
     all_messages = latest_messages + common_messages
     # Create list of latest and most common messages
-    options = [[" ".join(m)] for m in all_messages]
-    for o in options:  # options is a list of 2-item lists (button_text, button_value)
-        o.append(o[0])
+    options = []
+    for m in all_messages:  # options is a list of 2-item lists (button_text, button_value)
+        options.append([" ".join(m[1:]), " ".join(m)])
     return options
 
 
@@ -169,6 +169,7 @@ class MyBot(Bot):
                 context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
         if cmd in ["lang", "language"]:
             self.language = val
+            self.setenv()
             msg = _("Language set to %(lang)s") % {"lang": val}
             context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
         else:
@@ -179,6 +180,7 @@ class MyBot(Bot):
         self.setenv()
         print(json.dumps(update.to_dict(), indent=2))
         msg = []
+        count = 10
         words = update.message.text.split()
         words.pop(0)  # Remove /show
         if len(words) == 0:
@@ -186,19 +188,30 @@ class MyBot(Bot):
             msg.append(_("Add keyword after show command, e.g. one of %(keywords)s") % {"keywords": keywords})
             context.bot.send_message(chat_id=update.effective_chat.id, text="\n".join(msg))
             return
-        kw_str = words[0]
+        kw_str = words.pop(0)
         keywords = Keyword.objects.filter(type__iexact=kw_str)
         if len(keywords) == 1:
             records = Record.objects.filter(keyword=keywords[0]).order_by("-time")
         else:
             records = Record.objects.filter(name=kw_str).order_by("-time")
+        if len(words) > 0:
+            try:
+                count = int(words[0])
+            except ValueError:
+                pass
         if records:
-            for r in records[:10]:
-                tstr = r.time.astimezone(pytz.timezone(self.timezone)).strftime("%d.%m %H:%M")
-                msg.append("{} {}".format(tstr, " ".join(create_message(r.name, r))))
+            last_dstr = ""
+            for r in records[:count]:
+                dstr = r.time.astimezone(pytz.timezone(self.timezone)).strftime("%d.%m.%Y")
+                tstr = r.time.astimezone(pytz.timezone(self.timezone)).strftime("%H:%M")
+                if last_dstr != dstr:
+                    msg.append("<code>{}</code>".format(dstr))
+                    last_dstr = dstr
+                msg.append("<b>{}</b> {}".format(tstr, " ".join(create_message(r.name, r))))
         else:
             msg.append(_("No records for keyword %(kw_str)s found.") % {"kw_str": kw_str})
-        context.bot.send_message(chat_id=update.effective_chat.id, text="\n".join(msg))
+        context.bot.send_message(chat_id=update.effective_chat.id, text="\n".join(msg),
+                                 parse_mode=telegram.ParseMode.HTML)
 
     def reply_query(self, update: telegram.update.Update, context: CallbackContext):
         """
@@ -268,7 +281,7 @@ class MyBot(Bot):
             kws = Keyword.objects.filter(words__contains=[kw_str])
             if kws.count() == 1:  # keyword found, requested latest records?
                 reply_text = _("Keyword '%(kw_str)s' found. Choose one of these or cancel:") % {"kw_str": kw_str}
-                options = options_for_keyword(kw_str, 3)
+                options = options_for_keyword(kw_str, 5)
                 options.insert(0, [_("Cancel"), ""])
                 reply_markup = create_buttons_edit(options)
             else:
