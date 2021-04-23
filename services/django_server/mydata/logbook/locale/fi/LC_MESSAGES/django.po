@@ -1,0 +1,109 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2021-04-23 18:54+0300\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: logbook/management/commands/logbookbot.py:47
+msgid "Available commands:"
+msgstr "Mahdolliset komennot:"
+
+#: logbook/management/commands/logbookbot.py:48
+msgid "/help This message"
+msgstr "/help Tämä viesti"
+
+#: logbook/management/commands/logbookbot.py:49
+msgid "/show keyword: show latest records of keyword"
+msgstr "/show avainsana: näytä viimeisimmät tämän avainsanan tietueet"
+
+#: logbook/management/commands/logbookbot.py:146
+msgid "Add some of these after /set:"
+msgstr "Lisää joku näistä /set-komennon perään:"
+
+#: logbook/management/commands/logbookbot.py:154
+msgid "Empty command"
+msgstr "Tyhjä komento"
+
+#: logbook/management/commands/logbookbot.py:155
+msgid "You should add value for command too"
+msgstr "Lisää komennolle myös arvo"
+
+#: logbook/management/commands/logbookbot.py:165
+#, python-format
+msgid "Set timezone to %(tz)s"
+msgstr "Aseta aikavyöhyke arvoon %(tz)s"
+
+#: logbook/management/commands/logbookbot.py:168
+msgid "Found many"
+msgstr "Löytyi monta"
+
+#: logbook/management/commands/logbookbot.py:172
+#, python-format
+msgid "Language set to %(lang)s"
+msgstr "Kielivalinta asetettu arvoon %(lang)s"
+
+#: logbook/management/commands/logbookbot.py:175
+msgid "Unknown setting"
+msgstr "Tuntematon asetus"
+
+#: logbook/management/commands/logbookbot.py:186
+#, python-format
+msgid "Add keyword after show command, e.g. one of %(keywords)s"
+msgstr "Lisää avainsana show-komennon perään, esim. joku näistä: %(keywords)s"
+
+#: logbook/management/commands/logbookbot.py:200
+#, python-format
+msgid "No records for keyword %(kw_str)s found."
+msgstr "Yhtään tietuetta avainsanalle %(kw_str)s ei löytynyt."
+
+#: logbook/management/commands/logbookbot.py:226
+#, python-format
+msgid "New keyword created for %(kws)s. Current keywords are:"
+msgstr "Uusi avainsana lisätty kategoriaan %(kws)s. Nykyiset avainsanat ovat:"
+
+#: logbook/management/commands/logbookbot.py:228
+msgid "You must now edit original message to make it processed properly."
+msgstr ""
+"Sinun täytyy nyt muokata alkuperäistä viestiä, jotta se tulee käsitellyksi."
+
+#: logbook/management/commands/logbookbot.py:229
+msgid "Add a new space character between some words."
+msgstr "Lisää esimerkiksi välilyönti kahden sanan väliin."
+
+#: logbook/management/commands/logbookbot.py:231
+#, python-format
+msgid "Unknown reply: '%(data)s'."
+msgstr "Vastausta ei tunnistettu: '%(data)s'."
+
+#: logbook/management/commands/logbookbot.py:270
+#, python-format
+msgid "Keyword '%(kw_str)s' found. Choose one of these or cancel:"
+msgstr "Avainsana '%(kw_str)s' löytyi. Valitse yksi näistä tai peruuta:"
+
+#: logbook/management/commands/logbookbot.py:272
+#: logbook/management/commands/logbookbot.py:279
+msgid "Cancel"
+msgstr "Peruuta"
+
+#: logbook/management/commands/logbookbot.py:275
+#, python-format
+msgid "Keyword '%(kw_str)s' not found. Choose one of these or cancel:"
+msgstr "Avainsanaa '%(kw_str)s' ei löydy. Valitse yksi näistä tai peruuta:"
+
+#: logbook/management/commands/logbookbot.py:299
+msgid "Thank you for editing a message."
+msgstr "Kiitos viestin muokkauksesta."

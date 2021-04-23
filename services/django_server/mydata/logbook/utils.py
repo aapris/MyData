@@ -16,6 +16,7 @@ percentage_re: Pattern[str] = re.compile(r"(\d+\.?\d*)%")
 
 
 def sanitize_keyword(s: str) -> str:
+    """Remove illegal characters from a string"""
     return kw_re.sub('', s).lower()
 
 

@@ -48,8 +48,10 @@ cd MyData
 Copy `.env.dev-sample` to `.env.dev`.
 
 If you want to run python app locally (not in Docker container),
-you can activate environment variables running this command:  
-`export $(xargs < .env.dev)`
+you can activate environment variables running this command
+(change env file name if needed):
+
+`export $(grep '^\w' env.local | xargs)`
 
 ## Docker
 
@@ -70,4 +72,10 @@ python3 -m venv venv
 source venv/bin/activate
 ```
 
+## Django server
 
+`cd services/django_server/mydata/ && python manage.py runserver`
+
+## Logbook telegram bot
+
+`cd services/django_server/mydata/ && python manage.py logbookbot`
