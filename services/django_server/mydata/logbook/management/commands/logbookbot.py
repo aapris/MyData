@@ -43,7 +43,11 @@ def parse_message(msg: list):
 
 def help_cmd(update, context):
     help_msg = "\n".join(
-        ["Available commands:", "/help This message", "TODO: implement proper help command instead of this placeholder"]
+        [
+            "Available commands:",
+            "/help This message",
+            "/show keyword: show latest records of keyword",
+        ]
     )
     context.bot.send_message(chat_id=update.effective_chat.id, text=help_msg)
 
@@ -70,10 +74,10 @@ def strip_trailing_zeroes(num) -> str:
     return s.rstrip("0").rstrip(".") if "." in s else s
 
 
-def create_message(kw_str, r):
+def create_message(kw_str, r) -> List[str]:
     words = [kw_str, r.description]
     if r.quantity is not None:
-        words.append("{}g".format(strip_trailing_zeroes(r.quantity / 1000)))
+        words.append("{}g".format(strip_trailing_zeroes(r.quantity * 1000)))
     if r.abv is not None:
         words.append("{}%".format(strip_trailing_zeroes(r.abv)))
     if r.volume is not None:
@@ -107,7 +111,7 @@ def options_for_keyword(kw_str, count=3) -> list:
     all_messages = latest_messages + common_messages
     # Create list of latest and most common messages
     options = [[" ".join(m)] for m in all_messages]
-    for o in options:
+    for o in options:  # options is a list of 2-item lists (button_text, button_value)
         o.append(o[0])
     return options
 
@@ -141,6 +145,27 @@ class MyBot(Bot):
         else:
             msg = "Unknown setting"
             context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
+
+    def show_cmd(self, update: telegram.update.Update, context: CallbackContext):
+        print(json.dumps(update.to_dict(), indent=2))
+        msg = []
+        words = update.message.text.split()
+        words.pop(0)  # Remove /show
+        if len(words) == 0:
+            keywords = ", ".join([k[0] for k in Keyword.objects.values_list("type").order_by("type")])
+            msg.append(f"Add keyword after show command, e.g. one of {keywords}")
+            context.bot.send_message(chat_id=update.effective_chat.id, text="\n".join(msg))
+            return
+        kw_str = words[0]
+        keywords = Keyword.objects.filter(type__iexact=kw_str)
+        if len(keywords) == 1:
+            records = Record.objects.filter(keyword=keywords[0]).order_by("-time")
+        else:
+            records = Record.objects.filter(name=kw_str).order_by("-time")
+        for r in records[:10]:
+            tstr = r.time.astimezone(pytz.timezone(self.timezone)).strftime("%d.%m %H:%M")
+            msg.append("{} {}".format(tstr, " ".join(create_message(r.name, r))))
+        context.bot.send_message(chat_id=update.effective_chat.id, text="\n".join(msg))
 
     def reply_query(self, update: telegram.update.Update, context: CallbackContext):
         """
@@ -193,6 +218,9 @@ class MyBot(Bot):
             words = msg_text.split()
             words.pop(0)
             msg_text = " ".join(words)
+        if msg_text == "":  # Do nothing if message was empty
+            return
+        kw_str = sanitize_keyword(msg_text.split()[0])
         message_identifier = self.get_message_identifier(update)
         timestamp = update.message.date
         logging.info(f"Message time: {timestamp}, text: {msg_text}")
@@ -203,12 +231,11 @@ class MyBot(Bot):
         rec: Record = msg.update_record()
         if rec is None and msg_text != "":
             # res_msg.append("Record not found")
-            kw_str = sanitize_keyword(msg_text.split()[0])
             kws = Keyword.objects.filter(words__contains=[kw_str])
             if kws.count() == 1:  # keyword found, requested latest records?
                 reply_text = "Keyword '{}' found. Choose one of these or cancel.".format(kw_str)
                 options = options_for_keyword(kw_str, 3)
-                options.insert(0, ["Cancel", "Cancel query"])
+                options.insert(0, ["Cancel", ""])
                 reply_markup = create_buttons_edit(update, context, options)
             else:
                 reply_text = "Keyword '{}' not found. Choose one of these or cancel.".format(kw_str)
@@ -220,12 +247,12 @@ class MyBot(Bot):
             update.message.reply_text(reply_text, reply_markup=reply_markup)
             return
         else:
-            res_msg.append(f"Record {rec}")
+            res_msg.append(" ".join(create_message(kw_str, rec)))
         rf = self.download_files(msg, update, context)
         if rf:
             res_msg.append(f"Saved to {rf.file.name}.")
-            if rf.mimetype.startswith("image"):
-                res_msg.append("Consider sending images as files.")
+            # if rf.mimetype.startswith("image"):
+            #     res_msg.append("Consider sending images as files.")
         context.bot.send_message(chat_id=update.effective_chat.id, text="\n".join(res_msg))
 
     def handle_edited_message(self, update: telegram.update.Update, context: CallbackContext):
@@ -251,6 +278,7 @@ class MyBot(Bot):
         dispatcher = updater.dispatcher
         dispatcher.add_handler(CommandHandler("help", help_cmd))
         dispatcher.add_handler(CommandHandler("set", self.set_cmd))
+        dispatcher.add_handler(CommandHandler("show", self.show_cmd))
         dispatcher.add_handler(CallbackQueryHandler(self.reply_query))  # handling inline buttons pressing
         dispatcher.add_handler(MessageHandler(Filters.update.message, self.handle_message))
         dispatcher.add_handler(MessageHandler(Filters.update.edited_message, self.handle_edited_message))
