@@ -85,7 +85,7 @@ class Record(models.Model):
     abv = models.FloatField(blank=True, null=True)  # Alcohol by volume %, e.g. 4.5, 13.5, 40.0
     volume = models.FloatField(blank=True, null=True)  # amount in litres
     quantity = models.FloatField(blank=True, null=True)  # amount in kilograms
-    # TODO: rating field for food and drinks?
+    rating = models.FloatField(blank=True, null=True)  # rating, range e.g. 0-5 or 0-10
 
     # For convenience, lat and lon in numeric form too
     lat = models.FloatField(null=True, editable=False)  # degrees (°) -90.0 - 90.0
@@ -104,7 +104,7 @@ class Message(models.Model):
     time = models.DateTimeField(db_index=True)
     text = models.CharField(max_length=1000)
     source = models.CharField(max_length=32, blank=True)
-    source_id = models.CharField(max_length=64, unique=True)  # identifier in another system
+    source_id = models.CharField(max_length=64, blank=True, unique=True)  # identifier in another system
     json = models.JSONField(null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -136,6 +136,7 @@ def record_from_message(message: Message) -> Record:
                 percentage = logbook.utils.parse_percentage(words)
                 weight = logbook.utils.parse_weight(words)
                 intensity = logbook.utils.parse_float(words)
+                rating = logbook.utils.parse_star_rating(words)
                 timezone = message.user.profile.timezone if hasattr(message.user, "profile") else settings.TIME_ZONE
                 timestamp = logbook.utils.pick_time(words, timezone=timezone, timestamp=message.time)
                 description = " ".join(words)
@@ -152,6 +153,7 @@ def record_from_message(message: Message) -> Record:
                 r.abv = percentage
                 r.quantity = weight
                 r.intensity = intensity
+                r.rating = rating
                 r.time = timestamp
                 r.save()
                 return r

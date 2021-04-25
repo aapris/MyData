@@ -7,12 +7,13 @@ import pytz
 vol_units = {"l": 1, "dl": 0.1, "cl": 0.01, "ml": 0.001}
 weight_units = {"kg": 1, "g": 0.001, "mg": 0.000001}
 kw_re: Pattern[str] = re.compile(r"[^\w]")
-hhmm_re: Pattern[str] = re.compile(r"([-+])?(\d+):(\d\d)")
-minute_re: Pattern[str] = re.compile(r"([-+])(\d+)m")
-float_re: Pattern[str] = re.compile(r"(\d+\.\d+)")
-vol_re: Pattern[str] = re.compile(r"(\d+\.?\d*)({})".format("|".join(vol_units.keys())))
-weight_re: Pattern[str] = re.compile(r"(\d+\.?\d*)({})".format("|".join(weight_units.keys())))
-percentage_re: Pattern[str] = re.compile(r"(\d+\.?\d*)%")
+hhmm_re: Pattern[str] = re.compile(r"^([-+])?(\d+):(\d\d)")
+minute_re: Pattern[str] = re.compile(r"^([-+])(\d+)m")
+float_re: Pattern[str] = re.compile(r"^(\d+\.\d+)$")
+vol_re: Pattern[str] = re.compile(r"^(\d+\.?\d*)({})".format("|".join(vol_units.keys())))
+weight_re: Pattern[str] = re.compile(r"^(\d+\.?\d*)({})".format("|".join(weight_units.keys())))
+percentage_re: Pattern[str] = re.compile(r"^(\d+\.?\d*)%")
+rating_re: Pattern[str] = re.compile(r"^(\*+)([-+]?)")
 
 
 def sanitize_keyword(s: str) -> str:
@@ -79,6 +80,32 @@ def parse_float(words: list) -> float:
     Loop through words and return a float, if a float is found.
     """
     return parse_single_match(words, float_re)
+
+
+def parse_star_rating(words: list) -> float:
+    """
+    Loop through words and return a float, if "star" rating is found,
+    e.g. ** -> 2.0, ***+ -> 3.333, 5* -> 5.0, 9.5* -> 9.5
+    """
+    for i in range(len(words)):
+        if words[i].startswith("*"):
+            m = rating_re.findall(words[i])
+            if m:
+                val = m[0][0].count("*")
+                if m[0][1] == "-":
+                    val = val - 1 / 3
+                elif m[0][1] == "+":
+                    val = val + 1 / 3
+                words.pop(i)
+                return val
+        if words[i].endswith("*"):
+            w = words[i].replace(",", ".")
+            try:
+                val = float(w.rstrip("*"))
+                words.pop(i)
+                return val
+            except ValueError:
+                pass
 
 
 def pick_time(words: list, timezone: str, timestamp: datetime.datetime) -> datetime.datetime:

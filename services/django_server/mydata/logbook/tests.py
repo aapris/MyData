@@ -22,7 +22,7 @@ class MessageTestCase(TestCase):
     def test_keyword_not_found_messages(self):
         """Create Messages without valid Keyword and test that Record objects are NOT created"""
         for s in ["non existing keyword", "🧐 😮 😅 🍾", "The quick brown fox"]:
-            m = Message.objects.create(text=s, user=self.user, time=self.timestamp)
+            m = Message.objects.create(text=s, user=self.user, time=self.timestamp, source_id=str(uuid.uuid1()))
             r: Record = m.update_record()
             self.assertIsNone(r)
             self.assertFalse(hasattr(m, "record"))
@@ -30,7 +30,7 @@ class MessageTestCase(TestCase):
     def test_empty_messages(self):
         """Create empty Messages and test that Record objects are NOT created"""
         for s in ["", " ", " ", "  .  "]:
-            m = Message.objects.create(text=s, user=self.user, time=self.timestamp)
+            m = Message.objects.create(text=s, user=self.user, time=self.timestamp, source_id=str(uuid.uuid1()))
             r: Record = m.update_record()
             self.assertIsNone(r)
             self.assertFalse(hasattr(m, "record"))
@@ -46,7 +46,7 @@ class MessageTestCase(TestCase):
             ["lunch 0.4kg hernekeitto", None, None, None, 0.4],
             ["water water 2dl", None, None, 0.2, None],
         ]:
-            m = Message.objects.create(text=d[0], user=self.user, time=self.timestamp)
+            m = Message.objects.create(text=d[0], user=self.user, time=self.timestamp, source_id=str(uuid.uuid1()))
             r: Record = m.update_record()
             self.assertEqual(r.intensity, d[1])
             self.assertEqual(r.abv, d[2])
@@ -81,3 +81,26 @@ class MessageTestCase(TestCase):
                 except AssertionError:
                     print(f"FAILED VALUES: {r.time} {d[1]}")
                     raise
+
+
+    def test_starrating_messages(self):
+        """Create Messages and test that Record objects are created properly"""
+        # "keyword + other details", intensity, ABV, volume, quantity (in kilograms)
+        for d in [
+            ["lunch 0.4kg 3.0* hernekeitto", 3.0],
+            ["lunch 0.4kg hernekeitto 3.0*", 3.0],
+            ["lunch 0.4kg hernekeitto 9.25*", 9.25],
+            ["lunch hernekeitto 400g 3*", 3.0],
+            ["beverage 33cl 4,7% lager ***", 3.0],
+            ["beverage 0.24l 13.5% ***+ red wine ", 3 + 1/3],
+            ["beverage 0.24l 13.5% ***- red wine ", 3 - 1/3],
+            ["beverage ***** red wine 0.24l 13.5%", 5.0],
+            ["water water 2dl", None],
+        ]:
+            m = Message.objects.create(text=d[0], user=self.user, time=self.timestamp, source_id=str(uuid.uuid1()))
+            r: Record = m.update_record()
+            try:
+                self.assertEqual(r.rating, d[1])
+            except AssertionError:
+                print(f"FAILED VALUES: {r.rating} {d[1]} ({d[0]})")
+                raise
