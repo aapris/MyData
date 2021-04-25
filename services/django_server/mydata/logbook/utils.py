@@ -84,6 +84,7 @@ def parse_float(words: list) -> float:
 def pick_time(words: list, timezone: str, timestamp: datetime.datetime) -> datetime.datetime:
     if timestamp is None:
         timestamp = datetime.datetime.utcnow().replace(tzinfo=pytz.utc)
+    timestamp = timestamp.astimezone(pytz.timezone(timezone))
     for i in range(len(words)):
         w = words[i]
         # Parse HH:MM (-01:45, +01:20, 16:45) format
@@ -96,8 +97,6 @@ def pick_time(words: list, timezone: str, timestamp: datetime.datetime) -> datet
                 timestamp = timestamp + datetime.timedelta(hours=int(match[1]), minutes=int(match[2]))
             else:
                 timestamp = timestamp.replace(hour=int(match[1]), minute=int(match[2]), second=0, microsecond=0)
-            timestamp = timestamp.replace(tzinfo=None)
-            timestamp = pytz.timezone(timezone).localize(timestamp)
             words.pop(i)
             return timestamp
 

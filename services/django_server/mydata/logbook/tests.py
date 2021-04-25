@@ -1,5 +1,5 @@
 import datetime
-
+import uuid
 import pytz
 from django.contrib.auth.models import User
 from django.test import TestCase
@@ -12,7 +12,8 @@ class MessageTestCase(TestCase):
 
     def setUp(self):
         self.timezone = "UTC"
-        self.timestamp = datetime.datetime(2021, 4, 8, 12, 0).replace(tzinfo=pytz.timezone(self.timezone))
+        # Use always localize
+        self.timestamp = pytz.timezone(self.timezone).localize(datetime.datetime(2021, 4, 8, 12, 0))
         self.user = User.objects.create(username="test")
         Profile.objects.create(user=self.user, timezone=self.timezone)
         # print(Keyword.objects.all())
@@ -55,19 +56,28 @@ class MessageTestCase(TestCase):
     def test_time_shift_messages(self):
         """Create Messages and test that Record objects are created properly"""
         # "keyword + other details", expected timestamp
-        for d in [
-            ["lunch pizza margherita ****+", self.timestamp],
-            ["lunch pizza -20m", self.timestamp + datetime.timedelta(minutes=-20)],
-            ["lunch -20m pizza ****+", self.timestamp + datetime.timedelta(minutes=-20)],
-            ["lunch pizza +20m", self.timestamp + datetime.timedelta(minutes=20)],
-            ["lunch +20m pizza ****+", self.timestamp + datetime.timedelta(minutes=20)],
-            ["lunch 11:00 pizza margherita", self.timestamp + datetime.timedelta(minutes=-60)],
-            ["lunch 13:00 pizza margherita", self.timestamp + datetime.timedelta(minutes=60)],
-            ["lunch pizza margherita +1:30", self.timestamp + datetime.timedelta(minutes=90)],
-            ["lunch pizza margherita +01:30", self.timestamp + datetime.timedelta(minutes=90)],
-            ["lunch pizza margherita -1:30", self.timestamp + datetime.timedelta(minutes=-90)],
-            ["lunch pizza margherita -01:30", self.timestamp + datetime.timedelta(minutes=-90)],
-        ]:
-            m = Message.objects.create(text=d[0], user=self.user, time=self.timestamp)
-            r: Record = m.update_record()
-            self.assertEqual(r.time, d[1])
+        for timezone in ["UTC", "Europe/Helsinki", "US/Hawaii"]:
+            self.user.profile.timezone = timezone
+            self.user.profile.save()
+            # Use always localize
+            timestamp = pytz.timezone(timezone).localize(datetime.datetime(2021, 4, 8, 12, 0))
+            for d in [
+                ["lunch pizza margherita ****+", timestamp],
+                ["lunch pizza -20m", timestamp + datetime.timedelta(minutes=-20)],
+                ["lunch -20m pizza ****+", timestamp + datetime.timedelta(minutes=-20)],
+                ["lunch pizza +20m", timestamp + datetime.timedelta(minutes=20)],
+                ["lunch +20m pizza ****+", timestamp + datetime.timedelta(minutes=20)],
+                ["lunch 11:00 pizza margherita", timestamp + datetime.timedelta(minutes=-60)],
+                ["lunch 13:00 pizza margherita", timestamp + datetime.timedelta(minutes=60)],
+                ["lunch pizza margherita +1:30", timestamp + datetime.timedelta(minutes=90)],
+                ["lunch pizza margherita +01:30", timestamp + datetime.timedelta(minutes=90)],
+                ["lunch pizza margherita -1:30", timestamp + datetime.timedelta(minutes=-90)],
+                ["lunch pizza margherita -01:30", timestamp + datetime.timedelta(minutes=-90)],
+            ]:
+                m = Message.objects.create(text=d[0], user=self.user, time=timestamp, source_id=str(uuid.uuid1()))
+                r: Record = m.update_record()
+                try:
+                    self.assertEqual(r.time, d[1])
+                except AssertionError:
+                    print(f"FAILED VALUES: {r.time} {d[1]}")
+                    raise
