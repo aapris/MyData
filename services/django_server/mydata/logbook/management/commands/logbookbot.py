@@ -47,6 +47,7 @@ def help_cmd(update, context):
             _("Available commands:"),
             _("/help This message"),
             _("/show keyword: show latest records of keyword"),
+            _("/search string: search latest records for string"),
         ]
     )
     context.bot.send_message(chat_id=update.effective_chat.id, text=help_msg)
@@ -85,6 +86,10 @@ def create_message(kw_str, r) -> List[str]:
         words.append("{}%".format(strip_trailing_zeroes(r.abv)))
     if r.volume is not None:
         words.append("{}l".format(strip_trailing_zeroes(r.volume)))
+    if r.intensity is not None:
+        words.append("{:.2f}".format(r.intensity))
+    if r.rating is not None:
+        words.append("{:.2f}*".format(r.rating))
     return words
 
 
@@ -213,6 +218,33 @@ class MyBot(Bot):
         context.bot.send_message(chat_id=update.effective_chat.id, text="\n".join(msg),
                                  parse_mode=telegram.ParseMode.HTML)
 
+    def search_cmd(self, update: telegram.update.Update, context: CallbackContext):
+        self.setenv()
+        print(json.dumps(update.to_dict(), indent=2))
+        msg = []
+        count = 10
+        words = update.message.text.split()
+        words.pop(0)  # Remove /search
+        if len(words) == 0:
+            msg.append(_("Add search string after search command"))
+            context.bot.send_message(chat_id=update.effective_chat.id, text="\n".join(msg))
+            return
+        search_str = words.pop(0)
+        records = Record.objects.filter(description__icontains=search_str).order_by("-time")
+        if records:
+            last_dstr = ""
+            for r in records[:count]:
+                dstr = r.time.astimezone(pytz.timezone(self.timezone)).strftime("%d.%m.%Y")
+                tstr = r.time.astimezone(pytz.timezone(self.timezone)).strftime("%H:%M")
+                if last_dstr != dstr:
+                    msg.append("<code>{}</code>".format(dstr))
+                    last_dstr = dstr
+                msg.append("<b>{}</b> {}".format(tstr, " ".join(create_message(r.name, r))))
+        else:
+            msg.append(_("No records for search string %(kw_str)s found.") % {"kw_str": search_str})
+        context.bot.send_message(chat_id=update.effective_chat.id, text="\n".join(msg),
+                                 parse_mode=telegram.ParseMode.HTML)
+
     def reply_query(self, update: telegram.update.Update, context: CallbackContext):
         """
         Callback method handling button press.
@@ -294,7 +326,7 @@ class MyBot(Bot):
             update.message.reply_text(reply_text, reply_markup=reply_markup)
             return
         else:
-            res_msg.append(" ".join(create_message(kw_str, rec)))
+            res_msg.append(" ".join(create_message(kw_str, rec)) + rec.time.strftime(" @%H:%M"))
         rf = self.download_files(msg, update, context)
         if rf:
             res_msg.append(f"Saved to {rf.file.name}.")
@@ -309,15 +341,21 @@ class MyBot(Bot):
         print(json.dumps(update.to_dict(), indent=2))
         message_identifier = self.get_message_identifier(update)
         msg = Message.objects.get(source_id=message_identifier)
-        res_msg = [_("Thank you for editing a message.")]
         t = self.get_message_text(update)
         msg.text = t
         msg.json = json.dumps(update.to_dict())
         msg.update_record()
         print(f"EDITED {t}")
         msg.save()
+        res_msg = []
         if hasattr(msg, "record"):
-            res_msg.append(f"Record {msg.record}")
+            rec: Record = msg.record
+            kw_str = rec.name
+            words = [_("Edit:"), rec.type] + create_message(kw_str, rec) + [rec.time.strftime(" @%H:%M")]
+            res_msg.append(" ".join(words))
+        else:
+            res_msg.append(_("Message.record doesn't exist.") + " 🧐")
+
         context.bot.send_message(chat_id=update.effective_chat.id, text="\n".join(res_msg))
 
     def poll_forever(self):
@@ -326,6 +364,7 @@ class MyBot(Bot):
         dispatcher.add_handler(CommandHandler("help", help_cmd))
         dispatcher.add_handler(CommandHandler("set", self.set_cmd))
         dispatcher.add_handler(CommandHandler("show", self.show_cmd))
+        dispatcher.add_handler(CommandHandler("search", self.search_cmd))
         dispatcher.add_handler(CallbackQueryHandler(self.reply_query))  # handling inline buttons pressing
         dispatcher.add_handler(MessageHandler(Filters.update.message, self.handle_message))
         dispatcher.add_handler(MessageHandler(Filters.update.edited_message, self.handle_edited_message))
