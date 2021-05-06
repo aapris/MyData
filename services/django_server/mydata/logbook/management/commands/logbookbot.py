@@ -1,3 +1,4 @@
+import datetime
 import json
 import logging
 import mimetypes
@@ -6,6 +7,7 @@ from collections import Counter
 from tempfile import TemporaryFile
 from typing import List
 
+import boozelib
 import pytz
 import requests
 import telegram
@@ -28,6 +30,46 @@ from logbook.utils import sanitize_keyword
 from .mytelegrambot import Bot
 
 mimetypes.init()
+
+
+def calculate_bac(weight=80, height=178, age=40):
+    """
+    Loop through latest records since 06:00 a.m. and estimate current BAC.
+    :param weight: person's weight in kg
+    :param height: person's height in cm
+    :param age: person's age in
+    :return:
+    """
+    boozelib.ALCOHOL_DEGRADATION = 0.0017
+    alcohols = Record.objects.filter(abv__isnull=False, volume__isnull=False)
+    now = datetime.datetime.now()
+    # Get previous 06 am for start time
+    starttime = now.replace(hour=6, minute=0, second=0, microsecond=0)
+    if starttime > now:
+        starttime -= datetime.timedelta(days=1)
+    starttime = pytz.timezone("Europe/Helsinki").localize(starttime)
+    alcohols = alcohols.filter(time__gt=starttime).order_by("time")
+    if alcohols.count() == 0:
+        logging.info("No BAC! 0.0‰!")
+        return 0.0
+    curr_time = alcohols[0].time
+    curr_bac = boozelib.get_blood_alcohol_content(
+        age=age, weight=weight, height=height, sex=False, volume=alcohols[0].volume, percent=alcohols[0].abv
+    )
+    prev_time = curr_time
+    for r in alcohols:
+        curr_time = r.time
+        inc = boozelib.get_blood_alcohol_content(
+            age=age, weight=weight, height=height, sex=False, volume=r.volume * 1000, percent=r.abv
+        )
+        mins = int((curr_time - prev_time).total_seconds() / 60)
+        deg = boozelib.get_blood_alcohol_degradation(age=age, weight=weight, height=height, sex=False, minutes=mins)
+        curr_bac -= deg
+        if curr_bac < 0.0:
+            curr_bac = 0.0
+        curr_bac += inc
+        prev_time = curr_time
+    return curr_bac
 
 
 def download_to_file_field(url: str, filename: str, field: Attachment.file):
@@ -215,8 +257,9 @@ class MyBot(Bot):
                 msg.append("<b>{}</b> {}".format(tstr, " ".join(create_message(r.name, r))))
         else:
             msg.append(_("No records for keyword %(kw_str)s found.") % {"kw_str": kw_str})
-        context.bot.send_message(chat_id=update.effective_chat.id, text="\n".join(msg),
-                                 parse_mode=telegram.ParseMode.HTML)
+        context.bot.send_message(
+            chat_id=update.effective_chat.id, text="\n".join(msg), parse_mode=telegram.ParseMode.HTML
+        )
 
     def search_cmd(self, update: telegram.update.Update, context: CallbackContext):
         self.setenv()
@@ -242,8 +285,9 @@ class MyBot(Bot):
                 msg.append("<b>{}</b> {}".format(tstr, " ".join(create_message(r.name, r))))
         else:
             msg.append(_("No records for search string %(kw_str)s found.") % {"kw_str": search_str})
-        context.bot.send_message(chat_id=update.effective_chat.id, text="\n".join(msg),
-                                 parse_mode=telegram.ParseMode.HTML)
+        context.bot.send_message(
+            chat_id=update.effective_chat.id, text="\n".join(msg), parse_mode=telegram.ParseMode.HTML
+        )
 
     def reply_query(self, update: telegram.update.Update, context: CallbackContext):
         """
@@ -304,7 +348,11 @@ class MyBot(Bot):
         timestamp = update.message.date
         logging.info(f"Message time: {timestamp}, text: {msg_text}")
         msg = Message.objects.create(
-            text=msg_text, source="TG", source_id=message_identifier, user=self.user, time=timestamp,
+            text=msg_text,
+            source="TG",
+            source_id=message_identifier,
+            user=self.user,
+            time=timestamp,
             json=json.dumps(update.to_dict()),
         )
         rec: Record = msg.update_record()
@@ -327,6 +375,8 @@ class MyBot(Bot):
             return
         else:
             res_msg.append(" ".join(create_message(kw_str, rec)) + rec.time.strftime(" @%H:%M"))
+            if rec.abv is not None and rec.volume is not None:
+                res_msg.append("BAC after latest alcohol: {:.2f}‰".format(calculate_bac()))
         rf = self.download_files(msg, update, context)
         if rf:
             res_msg.append(f"Saved to {rf.file.name}.")
