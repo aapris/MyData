@@ -341,11 +341,17 @@ class MyBot(Bot):
         print(json.dumps(update.to_dict(), indent=2))
         message_identifier = self.get_message_identifier(update)
         msg = Message.objects.get(source_id=message_identifier)
-        t = self.get_message_text(update)
-        msg.text = t
+        msg_text = self.get_message_text(update)
+        if msg_text.startswith("@"):
+            words = msg_text.split()
+            words.pop(0)
+            msg_text = " ".join(words)
+        if msg_text == "":  # Do nothing if message was empty
+            # TODO: delete original message in this case?
+            return
+        msg.text = msg_text
         msg.json = json.dumps(update.to_dict())
         msg.update_record()
-        print(f"EDITED {t}")
         msg.save()
         res_msg = []
         if hasattr(msg, "record"):
