@@ -11,6 +11,7 @@ requests
 # logbook
 python-telegram-bot
 Pillow
+boozelib>=0.7
 
 # timeline
 icalendar
